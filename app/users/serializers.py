@@ -19,7 +19,7 @@ def email_address_exists(email):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ['email', 'password']
+        fields = ['email', 'password', 'name']
         extra_kwargs = {
             'email': {'read_only': True},
             'password': {'write_only': True}
@@ -39,12 +39,16 @@ class UserSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
+        name = validated_data.pop('name', None)
         user = super().update(instance, validated_data)
 
         if password:
             user.set_password(password)
-            user.save()
-
+        
+        if name:
+            user.name = name
+        
+        user.save()
         return user
 
 

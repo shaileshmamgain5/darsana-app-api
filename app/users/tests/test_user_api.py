@@ -123,7 +123,6 @@ class UserApiTests(TestCase):
         self.assertTrue(verification.is_verified)
 
     def test_verify_email_invalid_pin(self):
-        # Test email verification with invalid pin
         payload = {
             'email': 'test@example.com',
             'password': 'testpass123',
@@ -142,7 +141,6 @@ class UserApiTests(TestCase):
         self.assertFalse(user.is_active)
 
     def test_verify_email_expired_pin(self):
-        # Test email verification with expired pin
         user = get_user_model().objects.create_user(
             email='test@example.com',
             password='testpass123'
@@ -164,7 +162,6 @@ class UserApiTests(TestCase):
         self.assertFalse(user.is_active)
 
     def test_verify_email_already_verified(self):
-        # Test verifying an already verified email
         user = get_user_model().objects.create_user(
             email='test@example.com',
             password='testpass123'
@@ -239,7 +236,6 @@ class UserApiTests(TestCase):
 
     # Login Tests
     def test_login_success(self):
-        # Test successful login
         user = get_user_model().objects.create_user(
             email='test@example.com',
             password='testpass123'
@@ -256,7 +252,6 @@ class UserApiTests(TestCase):
         self.assertIn('token', res.data)
 
     def test_login_unverified_user(self):
-        # Test login attempt with unverified user
         user = get_user_model().objects.create_user(
             email='test@example.com',
             password='testpass123'
@@ -341,6 +336,13 @@ class PrivateUserApiTests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertNotEqual(self.user.email, payload['email'])
         self.assertEqual(self.user.email, 'test@example.com')
+
+    def test_update_user_name(self):
+        payload = {'name': 'New Name'}
+        res = self.client.patch(ME_URL, payload)
+        self.user.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.user.name, payload['name'])
 
     def test_delete_user(self):
         res = self.client.delete(DELETE_URL)
