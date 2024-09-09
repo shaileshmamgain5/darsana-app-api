@@ -15,6 +15,9 @@ LOGIN_URL = reverse('login')
 FORGOT_PASSWORD_URL = reverse('forgot-password')
 RESET_PASSWORD_URL = reverse('reset-password')
 
+ME_URL = reverse('user-detail')
+DELETE_URL = reverse('user-delete')
+
 
 class UserApiTests(TestCase):
     def setUp(self):
@@ -308,3 +311,53 @@ class UserApiTests(TestCase):
         self.assertEqual(res.data['detail'], 'Password has been reset successfully.')
         user.refresh_from_db()
         self.assertTrue(user.check_password('newpassword123'))
+
+
+class PrivateUserApiTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_retrieve_user_profile(self):
+        res = self.client.get(ME_URL)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['email'], self.user.email)
+
+    def test_update_user_password(self):
+        payload = {'password': 'newpassword123'}
+        res = self.client.patch(ME_URL, payload)
+        self.user.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(self.user.check_password(payload['password']))
+
+    def test_update_user_email_not_allowed(self):
+        payload = {'email': 'newemail@example.com'}
+        res = self.client.patch(ME_URL, payload)
+        self.user.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertNotEqual(self.user.email, payload['email'])
+        self.assertEqual(self.user.email, 'test@example.com')
+
+    def test_delete_user(self):
+        res = self.client.delete(DELETE_URL)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], "User account and all associated data have been deleted.")
+        self.assertFalse(get_user_model().objects.filter(email=self.user.email).exists())
+        self.assertFalse(EmailVerification.objects.filter(user=self.user).exists())
+
+
+class PublicUserApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_auth_required(self):
+        res = self.client.get(ME_URL)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_delete_auth_required(self):
+        res = self.client.delete(DELETE_URL)
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)

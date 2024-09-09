@@ -6,6 +6,8 @@ from allauth.account.adapter import get_adapter
 from django.utils.translation import gettext as _
 from django.contrib.auth import authenticate
 from django.utils import timezone
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 
 def email_address_exists(email):
     User = get_user_model()
@@ -18,11 +20,31 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
         fields = ['email', 'password']
-        extra_kwargs = {'password': {'write_only': True}}
+        extra_kwargs = {
+            'email': {'read_only': True},
+            'password': {'write_only': True}
+        }
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(str(e))
+        return value
 
     def create(self, validated_data):
         user = get_user_model().objects.create_user(**validated_data)
         EmailVerification.objects.create(user=user)
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        user = super().update(instance, validated_data)
+
+        if password:
+            user.set_password(password)
+            user.save()
+
         return user
 
 

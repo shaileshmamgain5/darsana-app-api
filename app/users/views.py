@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import authenticate, login
 from .utils import send_verification_email
@@ -17,7 +17,8 @@ from .serializers import (
     LoginSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
-    ResendVerificationSerializer
+    ResendVerificationSerializer,
+    UserSerializer
 )
 
 from rest_framework.authtoken.models import Token
@@ -206,3 +207,47 @@ class ResendVerificationView(generics.CreateAPIView):
             {"detail": "Verification email has been resent."},
             status=status.HTTP_200_OK
         )
+
+
+class UserDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+
+        return Response(serializer.data)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        if 'password' in self.request.data:
+            instance = serializer.instance
+            instance.set_password(self.request.data['password'])
+            instance.save()
+
+
+class UserDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        # Delete all related data
+        EmailVerification.objects.filter(user=user).delete()
+        # Add any other related models that need to be deleted here
+
+        # Delete the user
+        user.delete()
+        return Response({"detail": "User account and all associated data have been deleted."}, status=status.HTTP_200_OK)
