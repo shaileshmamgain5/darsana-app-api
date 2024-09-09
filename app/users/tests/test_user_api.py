@@ -11,13 +11,18 @@ from datetime import timedelta
 REGISTER_URL = reverse('register')
 VERIFY_EMAIL_URL = reverse('verify-email')
 RESEND_VERIFICATION_URL = reverse('resend-verification')
+LOGIN_URL = reverse('login')
+FORGOT_PASSWORD_URL = reverse('forgot-password')
+RESET_PASSWORD_URL = reverse('reset-password')
 
 
 class UserApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
+    # User Registration Tests
     def test_create_user_success(self):
+        # Test creating a new user successfully
         payload = {
             'email': 'test@example.com',
             'password': 'testpass123',
@@ -34,99 +39,21 @@ class UserApiTests(TestCase):
         mock_send_mail.assert_called_once()
 
     def test_user_with_email_exists_error(self):
+        # Test creating a user that already exists fails
         payload = {'email': 'test@example.com', 'password': 'testpass123'}
         get_user_model().objects.create_user(**payload)
         res = self.client.post(REGISTER_URL, payload)
-
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_password_too_short_error(self):
+        # Test that the password must be more than 8 characters
         payload = {'email': 'test@example.com', 'password': 'pw'}
         res = self.client.post(REGISTER_URL, payload)
-
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         user_exists = get_user_model().objects.filter(
             email=payload['email']
         ).exists()
         self.assertFalse(user_exists)
-
-    @patch('users.views.EmailVerification.objects.get')
-    def test_verify_email_success(self, mock_get):
-        user = get_user_model().objects.create_user(
-            email='test@example.com',
-            password='testpass123'
-        )
-        verification = EmailVerification.objects.create(user=user)
-        mock_get.return_value = verification
-
-        payload = {
-            'email': 'test@example.com',
-            'verification_pin': verification.verification_pin
-        }
-        res = self.client.post(VERIFY_EMAIL_URL, payload)
-
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['status'], 'email verified')
-        user.refresh_from_db()
-        self.assertTrue(user.is_active)
-        verification.refresh_from_db()
-        self.assertTrue(verification.is_verified)
-
-    def test_verify_email_invalid_pin(self):
-        payload = {
-            'email': 'test@example.com',
-            'password': 'testpass123',
-        }
-        self.client.post(REGISTER_URL, payload)
-        user = get_user_model().objects.get(email=payload['email'])
-
-        verification_payload = {
-            'email': 'test@example.com',
-            'verification_pin': '000000'
-        }
-        res = self.client.post(VERIFY_EMAIL_URL, verification_payload)
-
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        user.refresh_from_db()
-        self.assertFalse(user.is_active)
-
-    def test_verify_email_expired_pin(self):
-        payload = {
-            'email': 'test@example.com',
-            'password': 'testpass123',
-        }
-        self.client.post(REGISTER_URL, payload)
-        user = get_user_model().objects.get(email=payload['email'])
-        verification = EmailVerification.objects.get(user=user)
-        verification.expires_at = timezone.now() - timedelta(days=1)
-        verification.save()
-
-        verification_payload = {
-            'email': 'test@example.com',
-            'verification_pin': verification.verification_pin
-        }
-        res = self.client.post(VERIFY_EMAIL_URL, verification_payload)
-
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        user.refresh_from_db()
-        self.assertFalse(user.is_active)
-
-    def test_verify_email_already_verified(self):
-        user = get_user_model().objects.create_user(
-            email='test@example.com',
-            password='testpass123'
-        )
-        verification = EmailVerification.objects.create(user=user)
-        verification.is_verified = True
-        # Save the verification object
-        verification.save()
-        payload = {
-            'email': 'test@example.com',
-            'verification_pin': verification.verification_pin
-        }
-        res = self.client.post(VERIFY_EMAIL_URL, payload)
-
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_user_invalid_email(self):
         payload = {
@@ -143,27 +70,6 @@ class UserApiTests(TestCase):
         }
         res = self.client.post(REGISTER_URL, payload)
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_verify_email_nonexistent_email(self):
-        payload = {
-            'email': 'nonexistent@example.com',
-            'verification_pin': '123456'
-        }
-        res = self.client.post(VERIFY_EMAIL_URL, payload)
-        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_verify_email_missing_fields(self):
-        res1 = self.client.post(
-            VERIFY_EMAIL_URL,
-            {'email': 'test@example.com'}
-        )
-        self.assertEqual(res1.status_code, status.HTTP_400_BAD_REQUEST)
-
-        res2 = self.client.post(
-            VERIFY_EMAIL_URL,
-            {'verification_pin': '123456'}
-        )
-        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_user_twice(self):
         payload = {
@@ -188,16 +94,125 @@ class UserApiTests(TestCase):
             mock_send_mail.call_args[0][1]
         )
 
-    def test_resend_verification_email(self):
+    # Email Verification Tests
+    @patch('users.views.EmailVerification.objects.get')
+    def test_verify_email_success(self, mock_get):
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+        verification = EmailVerification.objects.create(user=user)
+        mock_get.return_value = verification
+
+        payload = {
+            'email': 'test@example.com',
+            'verification_pin': verification.verification_pin
+        }
+        res = self.client.post(VERIFY_EMAIL_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], 'Email verified successfully.')
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        verification.refresh_from_db()
+        self.assertTrue(verification.is_verified)
+
+    def test_verify_email_invalid_pin(self):
+        # Test email verification with invalid pin
         payload = {
             'email': 'test@example.com',
             'password': 'testpass123',
         }
         self.client.post(REGISTER_URL, payload)
-        
+        user = get_user_model().objects.get(email=payload['email'])
+
+        verification_payload = {
+            'email': 'test@example.com',
+            'verification_pin': '000000'
+        }
+        res = self.client.post(VERIFY_EMAIL_URL, verification_payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_verify_email_expired_pin(self):
+        # Test email verification with expired pin
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+        verification = EmailVerification.objects.create(user=user)
+        verification.expires_at = timezone.now() - timedelta(days=1)
+        verification.save()
+
+        payload = {
+            'email': 'test@example.com',
+            'verification_pin': verification.verification_pin
+        }
+        res = self.client.post(VERIFY_EMAIL_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_verify_email_already_verified(self):
+        # Test verifying an already verified email
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = True
+        user.save()
+        verification = EmailVerification.objects.create(user=user)
+
+        payload = {
+            'email': 'test@example.com',
+            'verification_pin': verification.verification_pin
+        }
+        res = self.client.post(VERIFY_EMAIL_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data['detail'], 'Email is already verified.')
+
+    def test_verify_email_nonexistent_email(self):
+        payload = {
+            'email': 'nonexistent@example.com',
+            'verification_pin': '123456'
+        }
+        res = self.client.post(VERIFY_EMAIL_URL, payload)
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_verify_email_missing_fields(self):
+        res1 = self.client.post(
+            VERIFY_EMAIL_URL,
+            {'email': 'test@example.com'}
+        )
+        self.assertEqual(res1.status_code, status.HTTP_400_BAD_REQUEST)
+
+        res2 = self.client.post(
+            VERIFY_EMAIL_URL,
+            {'verification_pin': '123456'}
+        )
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # Resend Verification Tests
+    def test_resend_verification_email(self):
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+
+        payload = {'email': 'test@example.com'}
         with patch('users.views.send_verification_email') as mock_send:
-            res = self.client.post(RESEND_VERIFICATION_URL, {'email': payload['email']})
-        
+            res = self.client.post(RESEND_VERIFICATION_URL, payload)
+
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data['detail'], 'Verification email has been resent.')
         mock_send.assert_called_once()
@@ -210,11 +225,86 @@ class UserApiTests(TestCase):
         user.is_active = True
         user.save()
 
-        res = self.client.post(RESEND_VERIFICATION_URL, {'email': user.email})
-        
+        payload = {'email': 'test@example.com'}
+        res = self.client.post(RESEND_VERIFICATION_URL, payload)
+
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_resend_verification_email_to_nonexistent_user(self):
         res = self.client.post(RESEND_VERIFICATION_URL, {'email': 'nonexistent@example.com'})
-        
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # Login Tests
+    def test_login_success(self):
+        # Test successful login
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = True
+        user.save()
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        res = self.client.post(LOGIN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('token', res.data)
+
+    def test_login_unverified_user(self):
+        # Test login attempt with unverified user
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        with patch('users.views.send_verification_email') as mock_send:
+            res = self.client.post(LOGIN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('detail', res.data)
+        self.assertEqual(res.data['detail'], 'Email not verified. A new verification email has been sent.')
+        mock_send.assert_called_once()
+
+    # Password Reset Tests
+    def test_forgot_password(self):
+        # Test forgot password functionality
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+
+        payload = {'email': 'test@example.com'}
+        with patch('users.views.send_verification_email') as mock_send:
+            res = self.client.post(FORGOT_PASSWORD_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], 'Password reset email sent.')
+        mock_send.assert_called_once()
+
+    def test_reset_password(self):
+        # Test reset password functionality
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='oldpassword123'
+        )
+        verification = EmailVerification.objects.create(user=user)
+
+        payload = {
+            'email': 'test@example.com',
+            'verification_pin': verification.verification_pin,
+            'new_password': 'newpassword123'
+        }
+        res = self.client.post(RESET_PASSWORD_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], 'Password has been reset successfully.')
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('newpassword123'))

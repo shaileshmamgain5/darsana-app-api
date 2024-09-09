@@ -20,6 +20,8 @@ from .serializers import (
     ResendVerificationSerializer
 )
 
+from rest_framework.authtoken.models import Token
+
 
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
@@ -77,20 +79,30 @@ class VerifyEmailView(generics.CreateAPIView):
             )
 
         try:
+            user = get_user_model().objects.get(email=email)
+            if user.is_active:
+                return Response(
+                    {'detail': 'Email is already verified.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             verification = EmailVerification.objects.get(
                 verification_pin=verification_pin,
-                user__email=email,
+                user=user,
                 is_verified=False,
             )
             if verification.expires_at <= timezone.now():
                 raise ValidationError("Verification pin has expired.")
             verification.is_verified = True
             verification.save()
-            verification.user.is_active = True
-            verification.user.save()
+            user.is_active = True
+            user.save()
             return Response(
-                {'status': 'email verified'},
-                status=status.HTTP_200_OK)
+                {'detail': 'Email verified successfully.'},
+                status=status.HTTP_200_OK
+            )
+        except get_user_model().DoesNotExist:
+            raise ValidationError("User with this email does not exist.")
         except EmailVerification.DoesNotExist:
             raise ValidationError("Invalid verification pin.")
 
@@ -106,7 +118,11 @@ class LoginView(generics.CreateAPIView):
 
         if user.is_active:
             login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-            return Response({"detail": "Login successful."}, status=status.HTTP_200_OK)
+            token, created = Token.objects.get_or_create(user=user)
+            return Response({
+                "detail": "Login successful.",
+                "token": token.key
+            }, status=status.HTTP_200_OK)
         else:
             verification, created = EmailVerification.objects.get_or_create(user=user)
             if not created:
