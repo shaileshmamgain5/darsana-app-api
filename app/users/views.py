@@ -11,7 +11,14 @@ from django.contrib.auth import authenticate, login
 from .utils import send_verification_email
 
 from core.models import EmailVerification
-from .serializers import CustomRegisterSerializer, EmailVerificationSerializer, LoginSerializer
+from .serializers import (
+    CustomRegisterSerializer,
+    EmailVerificationSerializer,
+    LoginSerializer,
+    ForgotPasswordSerializer,
+    ResetPasswordSerializer,
+    ResendVerificationSerializer
+)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -109,3 +116,77 @@ class LoginView(generics.CreateAPIView):
                 {"detail": "Email not verified. A new verification email has been sent."},
                 status=status.HTTP_403_FORBIDDEN
             )
+
+
+class ForgotPasswordView(generics.CreateAPIView):
+    serializer_class = ForgotPasswordSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        user = get_user_model().objects.get(email=email)
+        
+        verification, created = EmailVerification.objects.get_or_create(user=user)
+        if not created:
+            verification.generate_new_pin()
+        
+        send_verification_email(user, verification.verification_pin)
+        
+        return Response(
+            {"detail": "Password reset email sent."},
+            status=status.HTTP_200_OK
+        )
+
+
+class ResetPasswordView(generics.CreateAPIView):
+    serializer_class = ResetPasswordSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        user = get_user_model().objects.get(email=serializer.validated_data['email'])
+        verification = EmailVerification.objects.get(
+            user=user,
+            verification_pin=serializer.validated_data['verification_pin']
+        )
+        
+        try:
+            password = serializer.validated_data['new_password']
+            user.set_password(password)
+            user.save()
+            
+            verification.is_verified = True
+            verification.save()
+            
+            return Response(
+                {"detail": "Password has been reset successfully."},
+                status=status.HTTP_200_OK
+            )
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResendVerificationView(generics.CreateAPIView):
+    serializer_class = ResendVerificationSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        user = get_user_model().objects.get(email=email)
+        
+        verification, created = EmailVerification.objects.get_or_create(user=user)
+        if not created:
+            verification.generate_new_pin()
+        
+        send_verification_email(user, verification.verification_pin)
+        
+        return Response(
+            {"detail": "Verification email has been resent."},
+            status=status.HTTP_200_OK
+        )

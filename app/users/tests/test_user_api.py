@@ -10,6 +10,7 @@ from datetime import timedelta
 
 REGISTER_URL = reverse('register')
 VERIFY_EMAIL_URL = reverse('verify-email')
+RESEND_VERIFICATION_URL = reverse('resend-verification')
 
 
 class UserApiTests(TestCase):
@@ -186,3 +187,34 @@ class UserApiTests(TestCase):
             'Your verification pin is',
             mock_send_mail.call_args[0][1]
         )
+
+    def test_resend_verification_email(self):
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123',
+        }
+        self.client.post(REGISTER_URL, payload)
+        
+        with patch('users.views.send_verification_email') as mock_send:
+            res = self.client.post(RESEND_VERIFICATION_URL, {'email': payload['email']})
+        
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], 'Verification email has been resent.')
+        mock_send.assert_called_once()
+
+    def test_resend_verification_email_to_verified_user(self):
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = True
+        user.save()
+
+        res = self.client.post(RESEND_VERIFICATION_URL, {'email': user.email})
+        
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_resend_verification_email_to_nonexistent_user(self):
+        res = self.client.post(RESEND_VERIFICATION_URL, {'email': 'nonexistent@example.com'})
+        
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

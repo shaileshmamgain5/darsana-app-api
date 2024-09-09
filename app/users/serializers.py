@@ -5,6 +5,7 @@ from dj_rest_auth.registration.serializers import RegisterSerializer
 from allauth.account.adapter import get_adapter
 from django.utils.translation import gettext as _
 from django.contrib.auth import authenticate
+from django.utils import timezone
 
 def email_address_exists(email):
     User = get_user_model()
@@ -101,3 +102,53 @@ class LoginSerializer(serializers.ModelSerializer):
                 attrs['user'] = user
                 return attrs
         raise serializers.ValidationError("Unable to log in with provided credentials.")
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        User = get_user_model()
+        if not User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("User with this email does not exist.")
+        return value
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    verification_pin = serializers.CharField(max_length=6)
+    new_password = serializers.CharField(write_only=True)
+
+    def validate_new_password(self, new_password):
+        return get_adapter().clean_password(new_password)
+
+    def validate(self, data):
+        User = get_user_model()
+        user = User.objects.filter(email=data['email']).first()
+        if not user:
+            raise serializers.ValidationError("User with this email does not exist.")
+        
+        try:
+            verification = EmailVerification.objects.get(
+                user=user,
+                verification_pin=data['verification_pin'],
+            )
+            if verification.expires_at <= timezone.now():
+                raise serializers.ValidationError("Verification pin has expired.")
+        except EmailVerification.DoesNotExist:
+            raise serializers.ValidationError("Invalid verification pin.")
+        
+        return data
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        User = get_user_model()
+        user = User.objects.filter(email=value).first()
+        if not user:
+            raise serializers.ValidationError("User with this email does not exist.")
+        if user.is_active:
+            raise serializers.ValidationError("This email is already verified.")
+        return value
