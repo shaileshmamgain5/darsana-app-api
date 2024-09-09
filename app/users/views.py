@@ -7,9 +7,11 @@ from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from django.contrib.auth import authenticate, login
+from .utils import send_verification_email
 
 from core.models import EmailVerification
-from .serializers import CustomRegisterSerializer, EmailVerificationSerializer
+from .serializers import CustomRegisterSerializer, EmailVerificationSerializer, LoginSerializer
 
 
 class RegisterView(generics.CreateAPIView):
@@ -84,3 +86,26 @@ class VerifyEmailView(generics.CreateAPIView):
                 status=status.HTTP_200_OK)
         except EmailVerification.DoesNotExist:
             raise ValidationError("Invalid verification pin.")
+
+
+class LoginView(generics.CreateAPIView):
+    serializer_class = LoginSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+
+        if user.is_active:
+            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            return Response({"detail": "Login successful."}, status=status.HTTP_200_OK)
+        else:
+            verification, created = EmailVerification.objects.get_or_create(user=user)
+            if not created:
+                verification.generate_new_pin()
+            send_verification_email(user, verification.verification_pin)
+            return Response(
+                {"detail": "Email not verified. A new verification email has been sent."},
+                status=status.HTTP_403_FORBIDDEN
+            )

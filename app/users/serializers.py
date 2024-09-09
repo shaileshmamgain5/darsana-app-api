@@ -4,7 +4,7 @@ from core.models import EmailVerification
 from dj_rest_auth.registration.serializers import RegisterSerializer
 from allauth.account.adapter import get_adapter
 from django.utils.translation import gettext as _
-
+from django.contrib.auth import authenticate
 
 def email_address_exists(email):
     User = get_user_model()
@@ -80,3 +80,24 @@ class CustomRegisterSerializer(RegisterSerializer):
         self.custom_signup(request, user)
         EmailVerification.objects.create(user=user)
         return user
+
+
+class LoginSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(style={'input_type': 'password'}, write_only=True)
+
+    class Meta:
+        model = get_user_model()
+        fields = ['email', 'password']
+        extra_kwargs = {'password': {'write_only': True}}
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
+
+        if email and password:
+            user = get_user_model().objects.filter(email=email).first()
+            if user and user.check_password(password):
+                attrs['user'] = user
+                return attrs
+        raise serializers.ValidationError("Unable to log in with provided credentials.")

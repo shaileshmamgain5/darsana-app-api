@@ -75,3 +75,8 @@ class EmailVerification(models.Model):
         if not self.pk:  # Only set expires_at when creating a new object
             self.expires_at = timezone.now() + timedelta(days=1)
         super().save(*args, **kwargs)
+
+    def generate_new_pin(self):
+        self.verification_pin = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        self.expires_at = timezone.now() + timezone.timedelta(days=1)
+        self.save()
