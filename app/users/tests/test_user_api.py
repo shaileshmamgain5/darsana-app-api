@@ -24,14 +24,13 @@ class UserApiTests(TestCase):
         self.client = APIClient()
 
     # User Registration Tests
-    def test_create_user_success(self):
-        # Test creating a new user successfully
+    @patch('users.views.send_verification_email')
+    def test_create_user_success(self, mock_send_email):
         payload = {
             'email': 'test@example.com',
             'password': 'testpass123',
         }
-        with patch('users.views.send_mail') as mock_send_mail:
-            res = self.client.post(REGISTER_URL, payload)
+        res = self.client.post(REGISTER_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         self.assertIn('detail', res.data)
@@ -39,7 +38,7 @@ class UserApiTests(TestCase):
         user = get_user_model().objects.get(email=payload['email'])
         self.assertTrue(user.check_password(payload['password']))
         self.assertFalse(user.is_active)
-        mock_send_mail.assert_called_once()
+        mock_send_email.assert_called_once()
 
     def test_user_with_email_exists_error(self):
         # Test creating a user that already exists fails
@@ -83,19 +82,45 @@ class UserApiTests(TestCase):
         res = self.client.post(REGISTER_URL, payload)
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('users.views.send_mail')
-    def test_verification_email_sent(self, mock_send_mail):
+    @patch('users.views.send_verification_email')
+    def test_verification_email_sent(self, mock_send_email):
         payload = {
             'email': 'test@example.com',
             'password': 'testpass123',
         }
         res = self.client.post(REGISTER_URL, payload)
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-        mock_send_mail.assert_called_once()
-        self.assertIn(
-            'Your verification pin is',
-            mock_send_mail.call_args[0][1]
-        )
+        mock_send_email.assert_called_once()
+        user = get_user_model().objects.get(email=payload['email'])
+        verification = EmailVerification.objects.get(user=user)
+        mock_send_email.assert_called_with(user, verification.verification_pin)
+
+    @patch('users.views.send_verification_email')
+    def test_create_user_email_fails(self, mock_send_email):
+        mock_send_email.side_effect = Exception("Email sending failed")
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123',
+        }
+        res = self.client.post(REGISTER_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertEqual(res.data['detail'], 'An error occurred during registration. Please try again.')
+        self.assertFalse(get_user_model().objects.filter(email=payload['email']).exists())
+        self.assertFalse(EmailVerification.objects.filter(user__email=payload['email']).exists())
+
+    @patch('users.views.send_verification_email')
+    def test_create_user_transaction_rollback(self, mock_send_email):
+        mock_send_email.side_effect = Exception("Email sending failed")
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123',
+        }
+        res = self.client.post(REGISTER_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertFalse(get_user_model().objects.filter(email=payload['email']).exists())
+        self.assertFalse(EmailVerification.objects.filter(user__email=payload['email']).exists())
 
     # Email Verification Tests
     @patch('users.views.EmailVerification.objects.get')

@@ -1,14 +1,15 @@
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import authenticate, login
-from .utils import send_verification_email
+from core.utils import send_verification_email
 
 from core.models import EmailVerification
 from .serializers import (
@@ -37,33 +38,28 @@ class RegisterView(generics.CreateAPIView):
         else:
             print(f"Serializer errors: {serializer.errors}")
         serializer.is_valid(raise_exception=True)
+        
         try:
-            user = serializer.save(request)
-            print(f"User created: {user.email}")
-            verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
-            print(f"Verification object: {verification}, Created: {created}")
-            send_mail(
-                'Verify your email',
-                f'Your verification pin is {verification.verification_pin}',
-                'from@example.com',
-                [user.email],
-                fail_silently=False,
-            )
-            print("Email sent successfully")
-            headers = self.get_success_headers(serializer.data)
-            return Response(
-                {"detail": "Verification e-mail sent."},
-                status=status.HTTP_201_CREATED, headers=headers)
-        except IntegrityError as e:
-            print(f"IntegrityError: {str(e)}")
-            return Response(
-                {"detail": "A user with this email already exists."},
-                status=status.HTTP_400_BAD_REQUEST)
+            with transaction.atomic():
+                user = serializer.save(request)
+                print(f"User created: {user.email}")
+                verification, created = EmailVerification.objects.get_or_create(user=user)
+                print(f"Verification object: {verification}, Created: {created}")
+                send_verification_email(user, verification.verification_pin)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            print(f"Unexpected error: {str(e)}")
             return Response(
-                {"detail": "An unexpected error occurred."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                {"detail": "An error occurred during registration. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {"detail": "Verification e-mail sent."},
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
 
 
 class VerifyEmailView(generics.CreateAPIView):
