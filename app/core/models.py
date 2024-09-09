@@ -7,6 +7,10 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+from django.conf import settings
+import random
+from django.utils import timezone
+from datetime import timedelta
 
 
 class UserManager(BaseUserManager):
@@ -48,3 +52,26 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
+
+
+class EmailVerification(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+    verification_pin = models.CharField(max_length=6, editable=False)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(
+        default=timezone.now() + timedelta(days=1)
+    )
+
+    def save(self, *args, **kwargs):
+        if not self.verification_pin:
+            self.verification_pin = ''.join(
+                [str(random.randint(0, 9)) for _ in range(6)]
+            )
+        if not self.pk:  # Only set expires_at when creating a new object
+            self.expires_at = timezone.now() + timedelta(days=1)
+        super().save(*args, **kwargs)
