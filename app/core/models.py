@@ -77,6 +77,8 @@ class EmailVerification(models.Model):
         super().save(*args, **kwargs)
 
     def generate_new_pin(self):
-        self.verification_pin = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        self.verification_pin = ''.join(
+            [str(random.randint(0, 9)) for _ in range(6)]
+            )
         self.expires_at = timezone.now() + timezone.timedelta(days=1)
         self.save()

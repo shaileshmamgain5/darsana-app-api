@@ -1,14 +1,12 @@
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import login
 from core.utils import send_verification_email
 
 from core.models import EmailVerification
@@ -43,14 +41,20 @@ class RegisterView(generics.CreateAPIView):
             with transaction.atomic():
                 user = serializer.save(request)
                 print(f"User created: {user.email}")
-                verification, created = EmailVerification.objects.get_or_create(user=user)
-                print(f"Verification object: {verification}, Created: {created}")
+                verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
+                print(
+                    f"Verification object: {verification}, Created: {created}"
+                    )
                 send_verification_email(user, verification.verification_pin)
         except ValidationError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
             return Response(
-                {"detail": "An error occurred during registration. Please try again."},
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            print(f"An error occurred during registration: {e}")
+            return Response(
+                {"detail": "An error occurred during registration. Please try again."}, # noqa
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -77,32 +81,31 @@ class VerifyEmailView(generics.CreateAPIView):
 
         try:
             user = get_user_model().objects.get(email=email)
-            verification = EmailVerification.objects.get(user=user)
-
-            if verification.is_verified and user.is_active:
+            if user.is_active:
                 return Response(
-                    {'detail': 'Email is already verified and account is active.'},
+                    {'detail': 'Email is already verified.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            if verification.verification_pin != verification_pin:
-                raise ValidationError("Invalid verification pin.")
-
+            verification = EmailVerification.objects.get(
+                verification_pin=verification_pin,
+                user=user,
+                is_verified=False,
+            )
             if verification.expires_at <= timezone.now():
                 raise ValidationError("Verification pin has expired.")
-
             verification.is_verified = True
             verification.save()
             user.is_active = True
             user.save()
             return Response(
-                {'detail': 'Email verified successfully and account activated.'},
+                {'detail': 'Email verified successfully.'},
                 status=status.HTTP_200_OK
             )
         except get_user_model().DoesNotExist:
             raise ValidationError("User with this email does not exist.")
         except EmailVerification.DoesNotExist:
-            raise ValidationError("No verification record found for this email.")
+            raise ValidationError("Invalid verification pin.")
 
 
 class LoginView(generics.CreateAPIView):
@@ -115,19 +118,23 @@ class LoginView(generics.CreateAPIView):
         user = serializer.validated_data['user']
 
         if user.is_active:
-            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            login(
+                request,
+                user,
+                backend='django.contrib.auth.backends.ModelBackend'
+                )
             token, created = Token.objects.get_or_create(user=user)
             return Response({
                 "detail": "Login successful.",
                 "token": token.key
             }, status=status.HTTP_200_OK)
         else:
-            verification, created = EmailVerification.objects.get_or_create(user=user)
+            verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
             if not created:
                 verification.generate_new_pin()
             send_verification_email(user, verification.verification_pin)
             return Response(
-                {"detail": "Email not verified. A new verification email has been sent."},
+                {"detail": "Email not verified. A new verification email has been sent."}, # noqa
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -142,7 +149,7 @@ class ForgotPasswordView(generics.CreateAPIView):
         email = serializer.validated_data['email']
         user = get_user_model().objects.get(email=email)
 
-        verification, created = EmailVerification.objects.get_or_create(user=user)
+        verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
         if not created:
             verification.generate_new_pin()
 
@@ -162,7 +169,9 @@ class ResetPasswordView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = get_user_model().objects.get(email=serializer.validated_data['email'])
+        user = get_user_model().objects.get(
+            email=serializer.validated_data['email']
+            )
         verification = EmailVerification.objects.get(
             user=user,
             verification_pin=serializer.validated_data['verification_pin']
@@ -181,7 +190,10 @@ class ResetPasswordView(generics.CreateAPIView):
                 status=status.HTTP_200_OK
             )
         except ValidationError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class ResendVerificationView(generics.CreateAPIView):
@@ -194,11 +206,11 @@ class ResendVerificationView(generics.CreateAPIView):
         email = serializer.validated_data['email']
         user = get_user_model().objects.get(email=email)
 
-        verification, created = EmailVerification.objects.get_or_create(user=user)
-        verification.generate_new_pin()
+        verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
+        if not created:
+            verification.generate_new_pin()
 
         send_verification_email(user, verification.verification_pin)
-
         return Response(
             {"detail": "Verification email has been resent."},
             status=status.HTTP_200_OK
@@ -215,7 +227,11 @@ class UserDetailView(generics.RetrieveUpdateAPIView):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer = self.get_serializer(
+            instance,
+            data=request.data,
+            partial=partial
+        )
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
 
@@ -246,4 +262,4 @@ class UserDeleteView(generics.DestroyAPIView):
 
         # Delete the user
         user.delete()
-        return Response({"detail": "User account and all associated data have been deleted."}, status=status.HTTP_200_OK)
+        return Response({"detail": "User account and all associated data have been deleted."}, status=status.HTTP_200_OK) # noqa

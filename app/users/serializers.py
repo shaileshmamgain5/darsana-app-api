@@ -4,10 +4,10 @@ from core.models import EmailVerification
 from dj_rest_auth.registration.serializers import RegisterSerializer
 from allauth.account.adapter import get_adapter
 from django.utils.translation import gettext as _
-from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+
 
 def email_address_exists(email):
     User = get_user_model()
@@ -111,7 +111,10 @@ class CustomRegisterSerializer(RegisterSerializer):
 
 class LoginSerializer(serializers.ModelSerializer):
     email = serializers.EmailField()
-    password = serializers.CharField(style={'input_type': 'password'}, write_only=True)
+    password = serializers.CharField(
+        style={'input_type': 'password'},
+        write_only=True
+        )
 
     class Meta:
         model = get_user_model()
@@ -127,7 +130,9 @@ class LoginSerializer(serializers.ModelSerializer):
             if user and user.check_password(password):
                 attrs['user'] = user
                 return attrs
-        raise serializers.ValidationError("Unable to log in with provided credentials.")
+        raise serializers.ValidationError(
+            "Unable to log in with provided credentials."
+            )
 
 
 class ForgotPasswordSerializer(serializers.Serializer):
@@ -136,7 +141,9 @@ class ForgotPasswordSerializer(serializers.Serializer):
     def validate_email(self, value):
         User = get_user_model()
         if not User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("User with this email does not exist.")
+            raise serializers.ValidationError(
+                "User with this email does not exist."
+                )
         return value
 
 
@@ -152,7 +159,9 @@ class ResetPasswordSerializer(serializers.Serializer):
         User = get_user_model()
         user = User.objects.filter(email=data['email']).first()
         if not user:
-            raise serializers.ValidationError("User with this email does not exist.")
+            raise serializers.ValidationError(
+                "User with this email does not exist."
+                )
 
         try:
             verification = EmailVerification.objects.get(
@@ -160,9 +169,13 @@ class ResetPasswordSerializer(serializers.Serializer):
                 verification_pin=data['verification_pin'],
             )
             if verification.expires_at <= timezone.now():
-                raise serializers.ValidationError("Verification pin has expired.")
+                raise serializers.ValidationError(
+                    "Verification pin has expired."
+                    )
         except EmailVerification.DoesNotExist:
-            raise serializers.ValidationError("Invalid verification pin.")
+            raise serializers.ValidationError(
+                "Invalid verification pin."
+                )
 
         return data
 
@@ -174,7 +187,11 @@ class ResendVerificationSerializer(serializers.Serializer):
         User = get_user_model()
         user = User.objects.filter(email=value).first()
         if not user:
-            raise serializers.ValidationError("User with this email does not exist.")
+            raise serializers.ValidationError(
+                "User with this email does not exist."
+                )
         if user.is_active:
-            raise serializers.ValidationError("This email is already verified.")
+            raise serializers.ValidationError(
+                "This email is already verified."
+                )
         return value

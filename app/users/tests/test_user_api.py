@@ -104,10 +104,22 @@ class UserApiTests(TestCase):
         }
         res = self.client.post(REGISTER_URL, payload)
 
-        self.assertEqual(res.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
-        self.assertEqual(res.data['detail'], 'An error occurred during registration. Please try again.')
-        self.assertFalse(get_user_model().objects.filter(email=payload['email']).exists())
-        self.assertFalse(EmailVerification.objects.filter(user__email=payload['email']).exists())
+        self.assertEqual(
+            res.status_code,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        self.assertEqual(
+            res.data['detail'],
+            'An error occurred during registration. Please try again.'
+            )
+        self.assertFalse(
+            get_user_model().objects
+            .filter(email=payload['email']).exists()
+            )
+        self.assertFalse(
+            EmailVerification.objects
+            .filter(user__email=payload['email']).exists()
+            )
 
     @patch('users.views.send_verification_email')
     def test_create_user_transaction_rollback(self, mock_send_email):
@@ -118,9 +130,17 @@ class UserApiTests(TestCase):
         }
         res = self.client.post(REGISTER_URL, payload)
 
-        self.assertEqual(res.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
-        self.assertFalse(get_user_model().objects.filter(email=payload['email']).exists())
-        self.assertFalse(EmailVerification.objects.filter(user__email=payload['email']).exists())
+        self.assertEqual(
+            res.status_code,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        self.assertFalse(
+            get_user_model().objects.filter(email=payload['email']).exists()
+            )
+        self.assertFalse(
+            EmailVerification.objects
+            .filter(user__email=payload['email']).exists()
+            )
 
     # Email Verification Tests
     @patch('users.views.EmailVerification.objects.get')
@@ -141,7 +161,10 @@ class UserApiTests(TestCase):
         res = self.client.post(VERIFY_EMAIL_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], 'Email verified successfully and account activated.')
+        self.assertEqual(
+            res.data['detail'],
+            'Email verified successfully and account activated.'
+            )
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         verification.refresh_from_db()
@@ -196,7 +219,10 @@ class UserApiTests(TestCase):
         )
         user.is_active = True
         user.save()
-        verification = EmailVerification.objects.create(user=user, is_verified=True)
+        verification = EmailVerification.objects.create(
+            user=user,
+            is_verified=True
+        )
 
         payload = {
             'email': 'test@example.com',
@@ -205,7 +231,10 @@ class UserApiTests(TestCase):
         res = self.client.post(VERIFY_EMAIL_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(res.data['detail'], 'Email is already verified and account is active.')
+        self.assertEqual(
+            res.data['detail'],
+            'Email is already verified and account is active.'
+            )
 
     def test_verify_email_nonexistent_email(self):
         payload = {
@@ -236,7 +265,10 @@ class UserApiTests(TestCase):
         )
         user.is_active = False
         user.save()
-        verification = EmailVerification.objects.create(user=user, is_verified=True)
+        verification = EmailVerification.objects.create(
+            user=user,
+            is_verified=True
+        )
         verification.generate_new_pin()
         verification.save()
 
@@ -247,7 +279,10 @@ class UserApiTests(TestCase):
         res = self.client.post(VERIFY_EMAIL_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], 'Email verified successfully and account activated.')
+        self.assertEqual(
+            res.data['detail'],
+            'Email verified successfully and account activated.'
+            )
         user.refresh_from_db()
         self.assertTrue(user.is_active)
 
@@ -266,7 +301,10 @@ class UserApiTests(TestCase):
         res = self.client.post(RESEND_VERIFICATION_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], 'Verification email has been resent.')
+        self.assertEqual(
+            res.data['detail'],
+            'Verification email has been resent.'
+            )
         mock_send_email.assert_called_once()
 
     @patch('users.views.send_verification_email')
@@ -303,7 +341,10 @@ class UserApiTests(TestCase):
             res = self.client.post(RESEND_VERIFICATION_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], 'Verification email has been resent.')
+        self.assertEqual(
+            res.data['detail'],
+            'Verification email has been resent.'
+            )
         mock_send.assert_called_once()
 
     def test_resend_verification_email_to_verified_user(self):
@@ -320,7 +361,10 @@ class UserApiTests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_resend_verification_email_to_nonexistent_user(self):
-        res = self.client.post(RESEND_VERIFICATION_URL, {'email': 'nonexistent@example.com'})
+        res = self.client.post(
+            RESEND_VERIFICATION_URL,
+            {'email': 'nonexistent@example.com'}
+        )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
     # Login Tests
@@ -359,17 +403,15 @@ class UserApiTests(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn('detail', res.data)
-        self.assertEqual(res.data['detail'], 'Email not verified. A new verification email has been sent.')
+        self.assertEqual(
+            res.data['detail'],
+            'Email not verified. A new verification email has been sent.'
+            )
         mock_send.assert_called_once()
 
     # Password Reset Tests
     def test_forgot_password(self):
         # Test forgot password functionality
-        user = get_user_model().objects.create_user(
-            email='test@example.com',
-            password='testpass123'
-        )
-
         payload = {'email': 'test@example.com'}
         with patch('users.views.send_verification_email') as mock_send:
             res = self.client.post(FORGOT_PASSWORD_URL, payload)
@@ -394,7 +436,10 @@ class UserApiTests(TestCase):
         res = self.client.post(RESET_PASSWORD_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], 'Password has been reset successfully.')
+        self.assertEqual(
+            res.data['detail'],
+            'Password has been reset successfully.'
+            )
         user.refresh_from_db()
         self.assertTrue(user.check_password('newpassword123'))
 
@@ -438,9 +483,16 @@ class PrivateUserApiTests(TestCase):
     def test_delete_user(self):
         res = self.client.delete(DELETE_URL)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], "User account and all associated data have been deleted.")
-        self.assertFalse(get_user_model().objects.filter(email=self.user.email).exists())
-        self.assertFalse(EmailVerification.objects.filter(user=self.user).exists())
+        self.assertEqual(
+            res.data['detail'],
+            "User account and all associated data have been deleted."
+            )
+        self.assertFalse(
+            get_user_model().objects.filter(email=self.user.email).exists()
+            )
+        self.assertFalse(
+            EmailVerification.objects.filter(user=self.user).exists()
+            )
 
 
 class PublicUserApiTests(TestCase):
