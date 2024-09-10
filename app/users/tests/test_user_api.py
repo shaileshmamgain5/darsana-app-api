@@ -141,7 +141,7 @@ class UserApiTests(TestCase):
         res = self.client.post(VERIFY_EMAIL_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data['detail'], 'Email verified successfully.')
+        self.assertEqual(res.data['detail'], 'Email verified successfully and account activated.')
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         verification.refresh_from_db()
@@ -189,14 +189,14 @@ class UserApiTests(TestCase):
         self.assertFalse(user.is_active)
 
     def test_verify_email_already_verified(self):
-        # Test verifying an already verified email
+        # Test verifying an already verified email for an active user
         user = get_user_model().objects.create_user(
             email='test@example.com',
             password='testpass123'
         )
         user.is_active = True
         user.save()
-        verification = EmailVerification.objects.create(user=user)
+        verification = EmailVerification.objects.create(user=user, is_verified=True)
 
         payload = {
             'email': 'test@example.com',
@@ -205,7 +205,7 @@ class UserApiTests(TestCase):
         res = self.client.post(VERIFY_EMAIL_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(res.data['detail'], 'Email is already verified.')
+        self.assertEqual(res.data['detail'], 'Email is already verified and account is active.')
 
     def test_verify_email_nonexistent_email(self):
         payload = {
@@ -227,6 +227,67 @@ class UserApiTests(TestCase):
             {'verification_pin': '123456'}
         )
         self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_verify_inactive_user_with_verified_email(self):
+        # Test verifying an inactive user with an already verified email
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+        verification = EmailVerification.objects.create(user=user, is_verified=True)
+        verification.generate_new_pin()
+        verification.save()
+
+        payload = {
+            'email': 'test@example.com',
+            'verification_pin': verification.verification_pin
+        }
+        res = self.client.post(VERIFY_EMAIL_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], 'Email verified successfully and account activated.')
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    @patch('users.views.send_verification_email')
+    def test_resend_verification_for_inactive_user(self, mock_send_email):
+        # Create an inactive user
+        user = get_user_model().objects.create_user(
+            email='inactive@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+        EmailVerification.objects.create(user=user)
+
+        payload = {'email': 'inactive@example.com'}
+        res = self.client.post(RESEND_VERIFICATION_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['detail'], 'Verification email has been resent.')
+        mock_send_email.assert_called_once()
+
+    @patch('users.views.send_verification_email')
+    def test_resend_verification_generates_new_pin(self, mock_send_email):
+        # Create an inactive user with an existing verification
+        user = get_user_model().objects.create_user(
+            email='inactive@example.com',
+            password='testpass123'
+        )
+        user.is_active = False
+        user.save()
+        verification = EmailVerification.objects.create(user=user)
+        old_pin = verification.verification_pin
+
+        payload = {'email': 'inactive@example.com'}
+        res = self.client.post(RESEND_VERIFICATION_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        verification.refresh_from_db()
+        self.assertNotEqual(old_pin, verification.verification_pin)
+        mock_send_email.assert_called_once()
 
     # Resend Verification Tests
     def test_resend_verification_email(self):

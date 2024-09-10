@@ -38,7 +38,7 @@ class RegisterView(generics.CreateAPIView):
         else:
             print(f"Serializer errors: {serializer.errors}")
         serializer.is_valid(raise_exception=True)
-        
+
         try:
             with transaction.atomic():
                 user = serializer.save(request)
@@ -77,31 +77,32 @@ class VerifyEmailView(generics.CreateAPIView):
 
         try:
             user = get_user_model().objects.get(email=email)
-            if user.is_active:
+            verification = EmailVerification.objects.get(user=user)
+
+            if verification.is_verified and user.is_active:
                 return Response(
-                    {'detail': 'Email is already verified.'},
+                    {'detail': 'Email is already verified and account is active.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            verification = EmailVerification.objects.get(
-                verification_pin=verification_pin,
-                user=user,
-                is_verified=False,
-            )
+            if verification.verification_pin != verification_pin:
+                raise ValidationError("Invalid verification pin.")
+
             if verification.expires_at <= timezone.now():
                 raise ValidationError("Verification pin has expired.")
+
             verification.is_verified = True
             verification.save()
             user.is_active = True
             user.save()
             return Response(
-                {'detail': 'Email verified successfully.'},
+                {'detail': 'Email verified successfully and account activated.'},
                 status=status.HTTP_200_OK
             )
         except get_user_model().DoesNotExist:
             raise ValidationError("User with this email does not exist.")
         except EmailVerification.DoesNotExist:
-            raise ValidationError("Invalid verification pin.")
+            raise ValidationError("No verification record found for this email.")
 
 
 class LoginView(generics.CreateAPIView):
@@ -140,13 +141,13 @@ class ForgotPasswordView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
         user = get_user_model().objects.get(email=email)
-        
+
         verification, created = EmailVerification.objects.get_or_create(user=user)
         if not created:
             verification.generate_new_pin()
-        
+
         send_verification_email(user, verification.verification_pin)
-        
+
         return Response(
             {"detail": "Password reset email sent."},
             status=status.HTTP_200_OK
@@ -160,21 +161,21 @@ class ResetPasswordView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         user = get_user_model().objects.get(email=serializer.validated_data['email'])
         verification = EmailVerification.objects.get(
             user=user,
             verification_pin=serializer.validated_data['verification_pin']
         )
-        
+
         try:
             password = serializer.validated_data['new_password']
             user.set_password(password)
             user.save()
-            
+
             verification.is_verified = True
             verification.save()
-            
+
             return Response(
                 {"detail": "Password has been reset successfully."},
                 status=status.HTTP_200_OK
@@ -192,13 +193,12 @@ class ResendVerificationView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
         user = get_user_model().objects.get(email=email)
-        
+
         verification, created = EmailVerification.objects.get_or_create(user=user)
-        if not created:
-            verification.generate_new_pin()
-        
+        verification.generate_new_pin()
+
         send_verification_email(user, verification.verification_pin)
-        
+
         return Response(
             {"detail": "Verification email has been resent."},
             status=status.HTTP_200_OK

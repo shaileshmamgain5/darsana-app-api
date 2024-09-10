@@ -7,7 +7,7 @@ def send_verification_email(user, verification_pin):
     message = f'Your verification pin is: {verification_pin}'
     from_email = settings.DEFAULT_FROM_EMAIL
     recipient_list = [user.email]
-    
+
     try:
         if settings.DEBUG:
             print(f"DEBUG: Email not sent. Verification pin for {user.email}: {verification_pin}")

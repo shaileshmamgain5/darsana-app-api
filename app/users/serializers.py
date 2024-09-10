@@ -44,10 +44,10 @@ class UserSerializer(serializers.ModelSerializer):
 
         if password:
             user.set_password(password)
-        
+
         if name:
             user.name = name
-        
+
         user.save()
         return user
 
@@ -153,7 +153,7 @@ class ResetPasswordSerializer(serializers.Serializer):
         user = User.objects.filter(email=data['email']).first()
         if not user:
             raise serializers.ValidationError("User with this email does not exist.")
-        
+
         try:
             verification = EmailVerification.objects.get(
                 user=user,
@@ -163,7 +163,7 @@ class ResetPasswordSerializer(serializers.Serializer):
                 raise serializers.ValidationError("Verification pin has expired.")
         except EmailVerification.DoesNotExist:
             raise serializers.ValidationError("Invalid verification pin.")
-        
+
         return data
 
 
