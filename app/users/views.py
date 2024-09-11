@@ -81,25 +81,26 @@ class VerifyEmailView(generics.CreateAPIView):
 
         try:
             user = get_user_model().objects.get(email=email)
-            if user.is_active:
-                return Response(
-                    {'detail': 'Email is already verified.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
             verification = EmailVerification.objects.get(
                 verification_pin=verification_pin,
                 user=user,
-                is_verified=False,
             )
+            
+            if user.is_active and verification.is_verified:
+                return Response(
+                    {'detail': 'Email is already verified and account is active.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             if verification.expires_at <= timezone.now():
                 raise ValidationError("Verification pin has expired.")
+            
             verification.is_verified = True
             verification.save()
             user.is_active = True
             user.save()
             return Response(
-                {'detail': 'Email verified successfully.'},
+                {'detail': 'Email verified successfully and account activated.'},
                 status=status.HTTP_200_OK
             )
         except get_user_model().DoesNotExist:
@@ -147,18 +148,22 @@ class ForgotPasswordView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
-        user = get_user_model().objects.get(email=email)
 
-        verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
-        if not created:
-            verification.generate_new_pin()
-
-        send_verification_email(user, verification.verification_pin)
-
-        return Response(
-            {"detail": "Password reset email sent."},
-            status=status.HTTP_200_OK
-        )
+        try:
+            user = get_user_model().objects.get(email=email)
+            verification, created = EmailVerification.objects.get_or_create(user=user)
+            if not created:
+                verification.generate_new_pin()
+            send_verification_email(user, verification.verification_pin)
+            return Response(
+                {"detail": "Password reset email sent."},
+                status=status.HTTP_200_OK
+            )
+        except get_user_model().DoesNotExist:
+            return Response(
+                {"detail": "User with this email does not exist."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class ResetPasswordView(generics.CreateAPIView):

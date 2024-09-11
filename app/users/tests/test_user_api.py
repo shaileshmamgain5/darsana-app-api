@@ -410,8 +410,11 @@ class UserApiTests(TestCase):
         mock_send.assert_called_once()
 
     # Password Reset Tests
-    def test_forgot_password(self):
-        # Test forgot password functionality
+    def test_forgot_password_existing_email(self):
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
         payload = {'email': 'test@example.com'}
         with patch('users.views.send_verification_email') as mock_send:
             res = self.client.post(FORGOT_PASSWORD_URL, payload)
@@ -419,6 +422,13 @@ class UserApiTests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data['detail'], 'Password reset email sent.')
         mock_send.assert_called_once()
+
+    def test_forgot_password_nonexistent_email(self):
+        payload = {'email': 'nonexistent@example.com'}
+        res = self.client.post(FORGOT_PASSWORD_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(res.data['detail'], 'User with this email does not exist.')
 
     def test_reset_password(self):
         # Test reset password functionality

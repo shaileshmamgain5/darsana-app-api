@@ -139,11 +139,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        User = get_user_model()
-        if not User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(
-                "User with this email does not exist."
-                )
+        # Remove the validation for existing email
         return value
 
 

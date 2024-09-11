@@ -8,9 +8,10 @@ from django.contrib.auth.models import (
     PermissionsMixin,
 )
 from django.conf import settings
-import random
 from django.utils import timezone
-from datetime import timedelta
+from django.contrib.auth import get_user_model
+
+import random
 
 
 class UserManager(BaseUserManager):
@@ -47,44 +48,72 @@ class User(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     # assign a user manager to this class
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
 
+    class Meta:
+        verbose_name = 'User'
+        verbose_name_plural = 'Users'
+
+    def __str__(self):
+        return self.email
+
 
 class EmailVerification(models.Model):
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name='email_verification'
     )
     verification_pin = models.CharField(max_length=6, editable=False)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     expires_at = models.DateTimeField(
-        default=timezone.now() + timedelta(days=1)
+        default=timezone.now() + timezone.timedelta(days=1)
     )
+
+    class Meta:
+        verbose_name = 'Email Verification'
+        verbose_name_plural = 'Email Verifications'
 
     def save(self, *args, **kwargs):
         if not self.verification_pin:
-            self.verification_pin = ''.join(
-                [str(random.randint(0, 9)) for _ in range(6)]
-            )
+            self.verification_pin = self.generate_pin()
         if not self.pk:  # Only set expires_at when creating a new object
-            self.expires_at = timezone.now() + timedelta(days=1)
+            self.expires_at = timezone.now() + timezone.timedelta(days=1)
         super().save(*args, **kwargs)
 
     def generate_new_pin(self):
-        self.verification_pin = ''.join(
-            [str(random.randint(0, 9)) for _ in range(6)]
-            )
+        self.verification_pin = self.generate_pin()
         self.expires_at = timezone.now() + timezone.timedelta(days=1)
         self.save()
 
+    @staticmethod
+    def generate_pin():
+        return ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+    def __str__(self):
+        return f"Verification for {self.user.email}"
+
 
 #Features
+class Visibility(models.TextChoices):
+    PUBLIC = 'public', 'Public'
+    PRIVATE = 'private', 'Private'
+    FRIENDS = 'friends', 'Friends'
+
+
+class RepeatType(models.TextChoices):
+    NONE = 'none', 'None'
+    DAILY = 'daily', 'Daily'
+    WEEKLY = 'weekly', 'Weekly'
+    MONTHLY = 'monthly', 'Monthly'
 
 
 class Tag(models.Model):
@@ -101,6 +130,8 @@ class Category(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        verbose_name_plural = "Categories"
 
 class DayOfWeek(models.Model):
     day = models.CharField(
@@ -124,22 +155,22 @@ class DayOfMonth(models.Model):
     def __str__(self):
         return str(self.day)
 
+    def clean(self):
+        if self.day < 1 or self.day > 31:
+            raise ValidationError('Day must be between 1 and 31.')
 
-class Journal(models.Model):
-    VISIBILITY_CHOICES = [
-        ('public', 'Public'),
-        ('private', 'Private'),
-    ]
+class JournalTemplate(models.Model):
     # user who created the journal, null if system created
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        get_user_model(),
         on_delete=models.SET_NULL,
         null=True,
-        blank=True
+        blank=True,
+        related_name='journal_templates'
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    additional_info = models.TextField(blank=True, null=True)  # Any additional information
+    additional_info = models.TextField(blank=True, null=True)
     cover_image = models.ImageField(
         upload_to='journal_covers/',
         blank=True,
@@ -147,20 +178,43 @@ class Journal(models.Model):
     )
     visibility = models.CharField(
         max_length=10,
-        choices=VISIBILITY_CHOICES,
-        default='private'
+        choices=Visibility.choices,
+        default=Visibility.PRIVATE
     )
-    tags = models.ManyToManyField(Tag, blank=True)  # Journal has multiple tags
+    tags = models.ManyToManyField('Tag', blank=True)
     is_system_created = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # The 'related_name' allows reverse lookup from User to quotes
+    favorited_by = models.ManyToManyField(
+        get_user_model(),
+        related_name='favorite_journals',
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = 'Journal Template'
+        verbose_name_plural = 'Journal Templates'
 
     def __str__(self):
         return self.title
 
+    def mark_as_favorite(self, user):
+        """Add user to the list of those \
+            who favorited this journal template."""
+        self.favorited_by.add(user)
 
-class Topic(models.Model):
-    journal = models.ForeignKey(Journal, on_delete=models.CASCADE, related_name='topics')  # Journal to which this topic belongs
+    def remove_favorite(self, user):
+        """Remove user from the list of those
+        who favorited this journal template."""
+        self.favorited_by.remove(user)
+
+    def is_favorited_by(self, user):
+        return self.favorited_by.filter(id=user.id).exists()
+
+
+class JournalTopic(models.Model):
+    journal = models.ForeignKey(JournalTemplate, on_delete=models.CASCADE, related_name='topics')
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
 
@@ -169,27 +223,26 @@ class Topic(models.Model):
 
 
 class BasePrompt(models.Model):
-    prompt_text = models.TextField()  # The text of the prompt
-    description = models.TextField(blank=True, null=True) # about the prompt
-    is_answer_required = models.BooleanField(default=True)  # Whether the prompt requires an answer
-    tags = models.ManyToManyField(Tag, blank=True)  # Tags for categorization
+    prompt_text = models.TextField()
+    description = models.TextField(blank=True, null=True)
+    is_answer_required = models.BooleanField(default=True)
+    tags = models.ManyToManyField(Tag, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        abstract = True  # This makes it an abstract base class
-
+        abstract = True
 
 class JournalPrompt(BasePrompt):
     topic = models.ForeignKey(
-        Topic,
-        on_delete=models.CASCADE,
+        JournalTopic,
+        on_delete=models.SET_NULL,
         related_name='prompts',
         null=True,
         blank=True
     )  # A prompt belongs to a topic, but it can be null if it's a base prompt
     journal = models.ForeignKey(
-        Journal,
+        JournalTemplate,
         on_delete=models.CASCADE,
         related_name='base_prompts',
         null=True,
@@ -198,17 +251,11 @@ class JournalPrompt(BasePrompt):
     order = models.IntegerField()  # Defines the order of the prompt in the sequence
 
     def __str__(self):
-        return self.prompt_text[:50]  # Show the first 50 characters of the prompt
-
+        return self.prompt_text[:50]
 
 class StandalonePrompt(BasePrompt):
-    VISIBILITY_CHOICES = [
-        ('public', 'Public'),
-        ('private', 'Private'),
-    ]
-
     user = models.ForeignKey(
-        User,
+        get_user_model(),
         on_delete=models.CASCADE,
         null=True,
         blank=True
@@ -217,8 +264,8 @@ class StandalonePrompt(BasePrompt):
     tags = models.ManyToManyField('Tag', blank=True)  # Tags for standalone prompts
     visibility = models.CharField(
         max_length=10,
-        choices=VISIBILITY_CHOICES,
-        default='private'
+        choices=Visibility.choices,
+        default=Visibility.PRIVATE
     )
     is_system_created = models.BooleanField(default=False)
 
@@ -226,78 +273,94 @@ class StandalonePrompt(BasePrompt):
         return self.title
 
 
-class PromptResponse(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)  # The user responding to the prompt
-    prompt_text = models.ForeignKey(
-        JournalPrompt,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )  # Response to a journal prompt
-    standalone_prompt = models.ForeignKey(
-        StandalonePrompt,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )  # Response to a standalone prompt
-    # response prompt can be different from the prompt text
-    response_prompt_text = models.TextField(blank=True, null=True)
-    response_text = models.TextField(
+class JournalEntry(models.Model):
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    journal_template = models.ForeignKey(
+        'JournalTemplate', 
+        on_delete=models.SET_NULL, 
+        null=True, 
         blank=True,
-        null=True
-    )  # The response text
-
-    created_at = models.DateTimeField(
-        auto_now_add=True
+        related_name='journal_entries'
+    )  # The journal template used (if any)
+    standalone_prompt = models.ForeignKey(
+        'StandalonePrompt',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
     )
+    is_completed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Response by {self.user.username}"
+        return f"Journal Entry by {self.user.username}"
 
 
-class PromptResponse(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    journal_prompt = models.ForeignKey(
-        JournalPrompt,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE
-    )
-    standalone_prompt = models.ForeignKey(
-        StandalonePrompt,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE
-    )
+class PromptEntry(models.Model):
+    journal_entry = models.ForeignKey(
+        JournalEntry, 
+        on_delete=models.CASCADE, 
+        related_name='prompt_entries'
+    )  # Links the prompt entry to a journal entry
+    
+    user_prompt_text = models.TextField(blank=True, null=True)  # Optional user-generated prompt for plain entries
+    user_response_text = models.TextField(blank=True, null=True)  # The user's response
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        if self.journal_prompt:
-            return f"Response by {self.user.username} to Journal Prompt: {self.journal_prompt.prompt_text[:50]}"
-        return f"Response by {self.user.username} to Standalone Prompt: {self.standalone_prompt.prompt_text[:50]}"
+        return f"Prompt Entry by {self.journal_entry.user.username}"
+
+
+class Quote(models.Model):
+    text = models.TextField()
+    author = models.CharField(max_length=255)
+    tags = models.ManyToManyField(Tag, blank=True)  # Quote has multiple tags
+
+    # The 'related_name' allows reverse lookup from User to quotes
+    favorited_by = models.ManyToManyField(User, related_name='favorite_quotes', blank=True)
+
+    def __str__(self):
+        return f'"{self.text}" - {self.author}'
+
+    def mark_as_favorite(self, user):
+        """Add user to the list of those who favorited this quote."""
+        self.favorited_by.add(user)
+
+    def remove_favorite(self, user):
+        """Remove user from the list of those who favorited this quote."""
+        self.favorited_by.remove(user)
+
+    def is_favorited_by(self, user):
+        """Check if the quote is favorited by a specific user."""
+        return self.favorited_by.filter(id=user.id).exists()
+
+    class Meta:
+        verbose_name = 'Quote'
+        verbose_name_plural = 'Quotes'
 
 
 # Goals
 
 class Goal(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)  # The user who created the goal
-    title = models.CharField(max_length=255)  # Goal title (e.g., "Take a 30 min walk")
-    description = models.TextField(blank=True, null=True)  # Optional description (e.g., why it's important)
-    created_at = models.DateTimeField(auto_now_add=True)  # Goal creation timestamp
-    updated_at = models.DateTimeField(auto_now=True)  # Last updated timestamp
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='goals')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     repeats = models.CharField(
         max_length=10,
-        choices=[
-            ('daily', 'Daily'),
-            ('weekly', 'Weekly'),
-            ('monthly', 'Monthly')
-        ],
-        default='daily'
+        choices=RepeatType.choices,
+        default=RepeatType.DAILY
     )
-    
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Goal'
+        verbose_name_plural = 'Goals'
+
     def __str__(self):
-        return f"{self.title} - {self.user.username}"
+        return f"{self.title} - {self.user.email}"
 
 
 class GoalRepetition(models.Model):
@@ -308,11 +371,8 @@ class GoalRepetition(models.Model):
     )  # The goal this repetition belongs to
     repeat_type = models.CharField(
         max_length=10,
-        choices=[
-            ('daily', 'Daily'),
-            ('weekly', 'Weekly'),
-            ('monthly', 'Monthly')
-        ]
+        choices=RepeatType.choices,
+        default=RepeatType.DAILY
     )  # Specifies if the repetition is weekly or monthly
     days_of_week = models.ManyToManyField(
         DayOfWeek,
@@ -325,15 +385,16 @@ class GoalRepetition(models.Model):
     last_day_of_month = models.BooleanField(default=False)  # If the goal repeats on the last day of the month
 
     def __str__(self):
-        if self.repeat_type == 'weekly':
+        if self.repeat_type == RepeatType.WEEKLY:
             days = ', '.join([day.__str__() for day in self.days_of_week.all()])
             return f"{self.goal.title} repeats weekly on {days}"
-        elif self.repeat_type == 'monthly':
+        elif self.repeat_type == RepeatType.MONTHLY:
             if self.last_day_of_month:
                 return f"{self.goal.title} repeats on the last day of the month"
             else:
                 days = ', '.join([str(day) for day in self.days_of_month.all()])
                 return f"{self.goal.title} repeats monthly on days {days}"
+        return f"{self.goal.title} repeats {self.get_repeat_type_display()}"
 
 
 class GoalCompletion(models.Model):
@@ -370,25 +431,25 @@ class Profile(models.Model):
     ]
 
     user = models.OneToOneField(
-        User,
+        get_user_model(),
         on_delete=models.CASCADE
     )  # Links to the User model
     name = models.CharField(max_length=255)  # User's display name
     email = models.EmailField()  # User's email address
-    subscription = models.CharField(
+    subscription_details = models.CharField(
         max_length=100,
         blank=True,
         null=True
     )  # Subscription plan details
     morning_intention = models.OneToOneField(
-        'Journal',
+        'JournalTemplate',
         related_name='morning_intention',
         on_delete=models.SET_NULL,
         null=True,
         blank=True
     )  # Morning reflection journal
     evening_reflection = models.OneToOneField(
-        'Journal',
+        'JournalTemplate',
         related_name='evening_reflection',
         on_delete=models.SET_NULL,
         null=True,
@@ -398,19 +459,19 @@ class Profile(models.Model):
         max_length=10,
         choices=THEME_CHOICES,
         default='light'
-    )  # Theme preference
-    day_start = models.TimeField(default='08:00:00')  # The time when the user’s day starts
-    day_end = models.TimeField(default='20:00:00')  # The time when the user’s day ends
+    )
+    day_start = models.TimeField(default='08:00:00')
+    day_end = models.TimeField(default='20:00:00')
     week_start = models.CharField(
         max_length=10,
         choices=WEEK_START_CHOICES,
         default='sunday'
-    )  # Week starting day
+    )
     model_imagination = models.CharField(
         max_length=10,
         choices=MODEL_IMAGINATION_CHOICES,
         default='moderate'
-    )  # Imagination level of the AI model
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -443,22 +504,22 @@ class UserSubscription(models.Model):
     ]
 
     user_profile = models.OneToOneField(
-        'UserProfile',
+        Profile,
         on_delete=models.CASCADE,
-        related_name='subscription'
-    )  # Link to UserProfile
+        related_name='user_subscription'
+    )
     subscription_plan = models.ForeignKey(
         SubscriptionPlan,
         on_delete=models.SET_NULL,
         null=True
-    )  # The selected subscription plan
-    start_date = models.DateField(default=timezone.now)  # When the subscription started
-    end_date = models.DateField(blank=True, null=True)  # When the subscription will end
+    )
+    start_date = models.DateField(default=timezone.now)
+    end_date = models.DateField(blank=True, null=True)
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
         default='trial'
-    )  # The status of the subscription
+    )
     receipt_token = models.CharField(
         max_length=255,
         blank=True,
@@ -473,7 +534,4 @@ class UserSubscription(models.Model):
         return f"Subscription for {self.user_profile.user.username} - {self.subscription_plan.name}"
 
     def is_active(self):
-        """
-        Returns whether the subscription is currently active.
-        """
-        return self.status == 'active' and (self.end_date is None or self.end_date > timezone.now)
+        return self.status == 'active' and (self.end_date is None or self.end_date > timezone.now().date())
