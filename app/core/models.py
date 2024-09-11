@@ -7,6 +7,7 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth import get_user_model
