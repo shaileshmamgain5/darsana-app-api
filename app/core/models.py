@@ -339,6 +339,36 @@ class Quote(models.Model):
         verbose_name = 'Quote'
         verbose_name_plural = 'Quotes'
 
+# ... existing code ...
+
+
+class JournalSummary(models.Model):
+    RATING_CHOICES = [
+        (1, 'Not Helpful'),
+        (2, 'Somewhat Helpful'),
+        (3, 'Very Helpful'),
+    ]
+
+    journal_entry = models.OneToOneField(
+        JournalEntry,
+        on_delete=models.CASCADE,
+        related_name='summary'
+    )
+    title = models.CharField(max_length=255)
+    summary_text = models.TextField()
+    suggestions = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    mood = models.CharField(max_length=50, blank=True, null=True)
+    key_points = models.TextField(blank=True, null=True)
+    user_rating = models.IntegerField(choices=RATING_CHOICES, null=True, blank=True)
+
+    def __str__(self):
+        return f"Summary for {self.journal_entry}"
+
+    class Meta:
+        verbose_name = 'Journal Summary'
+        verbose_name_plural = 'Journal Summaries'
+
 
 # Goals
 
