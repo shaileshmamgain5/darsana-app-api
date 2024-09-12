@@ -1,55 +1,70 @@
 from rest_framework import serializers
-from core.models import (
-    Tag, Category, DayOfWeek, DayOfMonth, JournalTemplate, JournalTopic,
-    JournalPrompt, StandalonePrompt, JournalEntry, PromptEntry, Quote, JournalSummary
-)
-
-class TagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Tag
-        fields = '__all__'
-
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = '__all__'
-
-class JournalTemplateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JournalTemplate
-        fields = '__all__'
+from core.models import JournalTemplate, JournalTopic, JournalPrompt, JournalEntry, PromptEntry
 
 class JournalTopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = JournalTopic
-        fields = '__all__'
+        fields = [
+            'id',
+            'title',
+            'description'
+        ]
 
 class JournalPromptSerializer(serializers.ModelSerializer):
     class Meta:
         model = JournalPrompt
-        fields = '__all__'
+        fields = [
+            'id',
+            'prompt_text',
+            'description',
+            'is_answer_required',
+            'tags',
+            'order'
+        ]
 
-class StandalonePromptSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StandalonePrompt
-        fields = '__all__'
+class JournalTemplateSerializer(serializers.ModelSerializer):
+    topics = JournalTopicSerializer(many=True, read_only=True)
+    base_prompts = JournalPromptSerializer(many=True, read_only=True)
 
-class JournalEntrySerializer(serializers.ModelSerializer):
     class Meta:
-        model = JournalEntry
-        fields = '__all__'
+        model = JournalTemplate
+        fields = [
+            'id',
+            'user',
+            'title',
+            'description',
+            'additional_info',
+            'cover_image',
+            'visibility',
+            'tags',
+            'is_system_created',
+            'topics',
+            'base_prompts'
+        ]
 
 class PromptEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = PromptEntry
-        fields = '__all__'
+        fields = [
+            'id',
+            'journal_entry',
+            'user_prompt_text',
+            'user_response_text',
+            'created_at'
+        ]
 
-class QuoteSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Quote
-        fields = '__all__'
+class JournalEntrySerializer(serializers.ModelSerializer):
+    prompt_entries = PromptEntrySerializer(many=True, read_only=True)
 
-class JournalSummarySerializer(serializers.ModelSerializer):
     class Meta:
-        model = JournalSummary
-        fields = '__all__'
+        model = JournalEntry
+        fields = [
+            'id',
+            'user',
+            'journal_template',
+            'standalone_prompt',
+            'is_completed',
+            'created_at',
+            'updated_at',
+            'prompt_entries'
+        ]

@@ -357,7 +357,6 @@ class JournalSummary(models.Model):
     )
     title = models.CharField(max_length=255)
     summary_text = models.JSONField(default=list)
-    metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     mood = models.CharField(max_length=50, blank=True, null=True)
     key_points = models.JSONField(default=list, blank=True, null=True)
