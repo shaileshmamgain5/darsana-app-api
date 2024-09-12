@@ -170,8 +170,8 @@ class JournalTemplate(models.Model):
         related_name='journal_templates'
     )
     title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    additional_info = models.TextField(blank=True, null=True)
+    description = models.JSONField(default=list, blank=True, null=True)
+    additional_info = models.JSONField(default=list, blank=True, null=True)
     cover_image = models.ImageField(
         upload_to='journal_covers/',
         blank=True,
@@ -217,14 +217,14 @@ class JournalTemplate(models.Model):
 class JournalTopic(models.Model):
     journal = models.ForeignKey(JournalTemplate, on_delete=models.CASCADE, related_name='topics')
     title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
+    description = models.JSONField(default=list, blank=True, null=True)
 
     def __str__(self):
         return self.title
 
 
 class BasePrompt(models.Model):
-    prompt_text = models.TextField()
+    prompt_text = models.TextField(default=list)
     description = models.TextField(blank=True, null=True)
     is_answer_required = models.BooleanField(default=True)
     tags = models.ManyToManyField(Tag, blank=True)
@@ -304,8 +304,8 @@ class PromptEntry(models.Model):
         related_name='prompt_entries'
     )  # Links the prompt entry to a journal entry
     
-    user_prompt_text = models.TextField(blank=True, null=True)  # Optional user-generated prompt for plain entries
-    user_response_text = models.TextField(blank=True, null=True)  # The user's response
+    user_prompt_text = models.JSONField(default=list, blank=True, null=True)  # Optional user-generated prompt for plain entries
+    user_response_text = models.JSONField(default=list, blank=True, null=True)  # The user's response
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -356,11 +356,11 @@ class JournalSummary(models.Model):
         related_name='summary'
     )
     title = models.CharField(max_length=255)
-    summary_text = models.TextField()
-    suggestions = models.TextField()
+    summary_text = models.JSONField(default=list)
+    suggestions = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     mood = models.CharField(max_length=50, blank=True, null=True)
-    key_points = models.TextField(blank=True, null=True)
+    key_points = models.JSONField(default=list, blank=True, null=True)
     user_rating = models.IntegerField(choices=RATING_CHOICES, null=True, blank=True)
 
     def __str__(self):
@@ -439,6 +439,30 @@ class GoalCompletion(models.Model):
 
     def __str__(self):
         return f"{self.goal.title} - {self.date} - {'Completed' if self.is_completed else 'Not Completed'}"
+
+# Chat
+
+class ChatSession(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=[('ongoing', 'Ongoing'), ('completed', 'Completed')], default='ongoing')
+
+
+class ChatMessage(models.Model):
+    chat_session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
+    sender = models.CharField(max_length=20, choices=[('user', 'User'), ('system', 'System')])
+    text = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    message_type = models.CharField(max_length=20, choices=[('text', 'Text'), ('suggestion', 'Suggestion'), ('action', 'Action')], default='text')
+    action = models.CharField(max_length=50, null=True, blank=True)  # Example: 'show_suggestion', 'navigate_journal'
+
+class Thread(models.Model):
+    title = models.CharField(max_length=200)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    messages = models.ManyToManyField(ChatMessage)
 
 
 # Profile
