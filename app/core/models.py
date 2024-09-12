@@ -230,7 +230,7 @@ class BasePrompt(models.Model):
     tags = models.ManyToManyField(Tag, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         abstract = True
 
@@ -277,9 +277,9 @@ class StandalonePrompt(BasePrompt):
 class JournalEntry(models.Model):
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     journal_template = models.ForeignKey(
-        'JournalTemplate', 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        'JournalTemplate',
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='journal_entries'
     )  # The journal template used (if any)
@@ -299,11 +299,11 @@ class JournalEntry(models.Model):
 
 class PromptEntry(models.Model):
     journal_entry = models.ForeignKey(
-        JournalEntry, 
-        on_delete=models.CASCADE, 
+        JournalEntry,
+        on_delete=models.CASCADE,
         related_name='prompt_entries'
     )  # Links the prompt entry to a journal entry
-    
+
     user_prompt_text = models.JSONField(default=list, blank=True, null=True)  # Optional user-generated prompt for plain entries
     user_response_text = models.JSONField(default=list, blank=True, null=True)  # The user's response
 
@@ -357,7 +357,7 @@ class JournalSummary(models.Model):
     )
     title = models.CharField(max_length=255)
     summary_text = models.JSONField(default=list)
-    suggestions = models.JSONField(default=list)
+    metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     mood = models.CharField(max_length=50, blank=True, null=True)
     key_points = models.JSONField(default=list, blank=True, null=True)
@@ -442,28 +442,44 @@ class GoalCompletion(models.Model):
 
 # Chat
 
-class ChatSession(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    started_at = models.DateTimeField(auto_now_add=True)
-    ended_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=[('ongoing', 'Ongoing'), ('completed', 'Completed')], default='ongoing')
-
-
-class ChatMessage(models.Model):
-    chat_session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
-    sender = models.CharField(max_length=20, choices=[('user', 'User'), ('system', 'System')])
-    text = models.TextField()
-    timestamp = models.DateTimeField(auto_now_add=True)
-    message_type = models.CharField(max_length=20, choices=[('text', 'Text'), ('suggestion', 'Suggestion'), ('action', 'Action')], default='text')
-    action = models.CharField(max_length=50, null=True, blank=True)  # Example: 'show_suggestion', 'navigate_journal'
-
 class Thread(models.Model):
+    """ A Thread represents an ongoing conversation topic\
+          and can contain multiple ChatSessions.
+    """
     title = models.CharField(max_length=200)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    messages = models.ManyToManyField(ChatMessage)
+    is_archived = models.BooleanField(default=False)
 
+class ChatSession(models.Model):
+    """ A ChatSession represents a single chat session\
+          within a thread.
+    """
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.CASCADE,
+        related_name='sessions'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    # Maintaining the context ChatSessions
+    context = models.JSONField(default=dict, blank=True)
+
+class ChatMessage(models.Model):
+    chat_session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
+    sender = models.CharField(
+        max_length=20,
+        choices=[('user', 'User'), ('ai', 'AI')]
+    )
+    text = models.JSONField(default=list)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=50, null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
 
 # Profile
 
