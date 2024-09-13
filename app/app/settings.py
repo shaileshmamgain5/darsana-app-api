@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'categories',
     'prompts',
     'appconfig',
+    'moods',
 ]
 
 MIDDLEWARE = [
