@@ -15,6 +15,10 @@ from django.contrib.auth import get_user_model
 import random
 
 
+def get_email_verification_expiration_date():
+    return timezone.now() + timezone.timedelta(days=1)
+
+
 class UserManager(BaseUserManager):
     """Manager for users."""
 
@@ -75,9 +79,7 @@ class EmailVerification(models.Model):
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField(
-        default=timezone.now() + timezone.timedelta(days=1)
-    )
+    expires_at = models.DateTimeField(default=get_email_verification_expiration_date)
 
     class Meta:
         verbose_name = 'Email Verification'
@@ -87,12 +89,12 @@ class EmailVerification(models.Model):
         if not self.verification_pin:
             self.verification_pin = self.generate_pin()
         if not self.pk:  # Only set expires_at when creating a new object
-            self.expires_at = timezone.now() + timezone.timedelta(days=1)
+            self.expires_at = get_email_verification_expiration_date()
         super().save(*args, **kwargs)
 
     def generate_new_pin(self):
         self.verification_pin = self.generate_pin()
-        self.expires_at = timezone.now() + timezone.timedelta(days=1)
+        self.expires_at = get_email_verification_expiration_date()
         self.save()
 
     @staticmethod
@@ -618,3 +620,22 @@ class UserSubscription(models.Model):
 
     def is_active(self):
         return self.status == 'active' and (self.end_date is None or self.end_date > timezone.now().date())
+
+class AppConfiguration(models.Model):
+    version = models.CharField(max_length=50, unique=True)
+    is_active = models.BooleanField(default=False)
+    configurations = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"App Configuration v{self.version}"
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            # Set all other configurations to inactive
+            AppConfiguration.objects.exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
