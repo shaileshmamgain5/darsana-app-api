@@ -190,7 +190,10 @@ class JournalTemplate(models.Model):
         choices=Visibility.choices,
         default=Visibility.PRIVATE
     )
-    tags = models.ManyToManyField('Tag', blank=True)
+    tags = models.ManyToManyField(
+        'Tag',
+        blank=True
+    )
     is_system_created = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -198,6 +201,10 @@ class JournalTemplate(models.Model):
     favorited_by = models.ManyToManyField(
         get_user_model(),
         related_name='favorite_journals',
+        blank=True
+    )
+    category = models.ManyToManyField(
+        'Category',
         blank=True
     )
 
@@ -250,13 +257,6 @@ class JournalPrompt(BasePrompt):
         null=True,
         blank=True
     )  # A prompt belongs to a topic, but it can be null if it's a base prompt
-    journal = models.ForeignKey(
-        JournalTemplate,
-        on_delete=models.CASCADE,
-        related_name='base_prompts',
-        null=True,
-        blank=True
-    )  # Belongs to a journal if it's part of a base prompt sequence
     order = models.IntegerField()  # Defines the order of the prompt in the sequence
 
     def __str__(self):
@@ -459,6 +459,9 @@ class Thread(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_archived = models.BooleanField(default=False)
 
+    def __str__(self):
+        return f"{self.title} (User: {self.user.email})"
+
 class ChatSession(models.Model):
     """ A ChatSession represents a single chat session\
           within a thread.
@@ -468,14 +471,13 @@ class ChatSession(models.Model):
         on_delete=models.CASCADE,
         related_name='sessions'
     )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE
-    )
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     # Maintaining the context ChatSessions
     context = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"Session for {self.thread.title}"
 
 class ChatMessage(models.Model):
     chat_session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
@@ -487,6 +489,9 @@ class ChatMessage(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     action = models.CharField(max_length=50, null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"Message from {self.sender} in {self.chat_session}"
 
 # Profile
 
@@ -554,7 +559,7 @@ class Profile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.username}'s Profile"
+        return f"{self.user.email}'s Profile"
 
 
 class SubscriptionPlan(models.Model):

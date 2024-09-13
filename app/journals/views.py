@@ -8,8 +8,25 @@ class JournalTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = JournalTemplateSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
 
+    def get_queryset(self):
+        return JournalTemplate.objects.filter(user=self.request.user)
+
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        serializer.save(
+            user=self.request.user,
+            cover_image=self.request.FILES.get('cover_image')
+        )
+
+    def perform_update(self, serializer):
+        if 'cover_image' in self.request.FILES:
+            serializer.save(cover_image=self.request.FILES['cover_image'])
+        else:
+            serializer.save()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 class JournalTopicViewSet(viewsets.ModelViewSet):
     queryset = JournalTopic.objects.all()
