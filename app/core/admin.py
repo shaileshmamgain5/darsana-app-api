@@ -44,3 +44,16 @@ class UserAdmin(BaseUserAdmin):
 
 
 admin.site.register(models.User, UserAdmin)
+admin.site.register(models.StandalonePrompt)
+admin.site.register(models.JournalTemplate)
+admin.site.register(models.JournalTopic)
+admin.site.register(models.JournalPrompt)
+admin.site.register(models.JournalEntry)
+admin.site.register(models.PromptEntry)
+admin.site.register(models.Thread)
+admin.site.register(models.ChatSession)
+admin.site.register(models.ChatMessage)
+admin.site.register(models.Tag)
+admin.site.register(models.UserSubscription)
+admin.site.register(models.Category)
+admin.site.register(models.Profile)

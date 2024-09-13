@@ -52,6 +52,13 @@ INSTALLED_APPS = [
     'dj_rest_auth.registration',
     'users',
     'journals',
+    'tags',
+    'profiles',
+    'chats',
+    'subscriptions',
+    'goals',
+    'categories',
+    'prompts',
 ]
 
 MIDDLEWARE = [

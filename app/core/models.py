@@ -125,6 +125,13 @@ class Tag(models.Model):
 
 
 class Category(models.Model):
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        related_name='categories',
+        null=True,
+        blank=True
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
 
@@ -133,6 +140,7 @@ class Category(models.Model):
 
     class Meta:
         verbose_name_plural = "Categories"
+
 
 class DayOfWeek(models.Model):
     day = models.CharField(
