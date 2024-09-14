@@ -8,11 +8,16 @@ from django.contrib.auth.models import (
     PermissionsMixin,
 )
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
 import random
+
+
+def get_email_verification_expiration_date():
+    return timezone.now() + timezone.timedelta(days=1)
 
 
 class UserManager(BaseUserManager):
@@ -75,9 +80,7 @@ class EmailVerification(models.Model):
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField(
-        default=timezone.now() + timezone.timedelta(days=1)
-    )
+    expires_at = models.DateTimeField(default=get_email_verification_expiration_date)
 
     class Meta:
         verbose_name = 'Email Verification'
@@ -87,12 +90,12 @@ class EmailVerification(models.Model):
         if not self.verification_pin:
             self.verification_pin = self.generate_pin()
         if not self.pk:  # Only set expires_at when creating a new object
-            self.expires_at = timezone.now() + timezone.timedelta(days=1)
+            self.expires_at = get_email_verification_expiration_date()
         super().save(*args, **kwargs)
 
     def generate_new_pin(self):
         self.verification_pin = self.generate_pin()
-        self.expires_at = timezone.now() + timezone.timedelta(days=1)
+        self.expires_at = get_email_verification_expiration_date()
         self.save()
 
     @staticmethod
@@ -493,6 +496,43 @@ class ChatMessage(models.Model):
     def __str__(self):
         return f"Message from {self.sender} in {self.chat_session}"
 
+
+# Moods
+
+
+class MoodEntry(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)  # The user who submitted the mood
+    created_at = models.DateTimeField(auto_now_add=True)  # Timestamp for when the mood was recorded
+    mood_value = models.IntegerField(
+        choices=[(i, str(i)) for i in range(1, 6)],
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )  # Value from the slider, now locked between 1 and 5
+    mood_description = models.TextField(blank=True, null=True)  # Optional description or note about the mood
+
+    def __str__(self):
+        return f"Mood Entry for {self.user.username} at {self.created_at}"
+
+
+class MoodTag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    for_value = models.IntegerField(
+        choices=[(i, str(i)) for i in range(1, 6)],
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+
+    def __str__(self):
+        return f"{self.name} (for mood value: {self.for_value})"
+
+
+class MoodResponse(models.Model):
+    mood_entry = models.ForeignKey(MoodEntry, on_delete=models.CASCADE, related_name='responses')  # Link to the mood entry
+    mood_tags = models.ManyToManyField(MoodTag, blank=True)  # Tags describing the mood
+
+    def __str__(self):
+        tags = ', '.join([tag.name for tag in self.mood_tags.all()])
+        return f"Mood Response: {self.mood_entry.user.username} | Tags: {tags}"
+
+
 # Profile
 
 
@@ -618,3 +658,22 @@ class UserSubscription(models.Model):
 
     def is_active(self):
         return self.status == 'active' and (self.end_date is None or self.end_date > timezone.now().date())
+
+class AppConfiguration(models.Model):
+    version = models.CharField(max_length=50, unique=True)
+    is_active = models.BooleanField(default=False)
+    configurations = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"App Configuration v{self.version}"
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            # Set all other configurations to inactive
+            AppConfiguration.objects.exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)

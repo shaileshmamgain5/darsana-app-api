@@ -59,6 +59,8 @@ INSTALLED_APPS = [
     'goals',
     'categories',
     'prompts',
+    'appconfig',
+    'moods',
 ]
 
 MIDDLEWARE = [
