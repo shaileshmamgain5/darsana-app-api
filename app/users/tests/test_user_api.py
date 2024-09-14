@@ -432,7 +432,7 @@ class UserApiTests(TestCase):
         profile = Profile.objects.get(user=user)
         self.assertEqual(profile.email, user.email)
 
-    @patch('core.utils.copy_default_daily_journals')
+    @patch('users.views.copy_default_daily_journals')
     def test_login_copies_default_journals(self, mock_copy_journals):
         user = get_user_model().objects.create_user(
             email='test@example.com',
@@ -447,10 +447,10 @@ class UserApiTests(TestCase):
         res = self.client.post(LOGIN_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        mock_copy_journals.assert_called_once_with(user)
+        mock_copy_journals.assert_called_once()
 
-    @patch('core.utils.copy_default_daily_journals')
-    def test_login_handles_journal_copy_error(self, mock_copy_journals):
+    @patch('users.views.copy_default_daily_journals')
+    def test_login_succeeds_even_if_journal_copy_fails(self, mock_copy_journals):
         mock_copy_journals.side_effect = Exception("Journal copy failed")
         user = get_user_model().objects.create_user(
             email='test@example.com',
@@ -466,6 +466,7 @@ class UserApiTests(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn('token', res.data)
+        mock_copy_journals.assert_called_with(user)
 
     # Password Reset Tests
     def test_forgot_password_existing_email(self):

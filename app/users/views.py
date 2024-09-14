@@ -134,6 +134,7 @@ class LoginView(generics.CreateAPIView):
             # Copy default journals
             try:
                 with transaction.atomic():
+                    print(f"Copying default journals for user: {user.email}")
                     copy_default_daily_journals(user)
             except Exception:
                 # If copying fails, continue without raising an error

@@ -5,13 +5,18 @@ from django.core.exceptions import ValidationError
 from rest_framework import permissions
 from core.models import JournalTemplate, JournalPrompt
 from django.db import transaction
+from .constants import (
+    DEFAULT_JOURNAL_IDS,
+    DEFAULT_MORNING_JOURNAL_ID,
+    DEFAULT_EVENING_JOURNAL_ID
+)
+
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
         return obj.user == request.user
-
 
 def send_verification_email(user, verification_pin):
     subject = 'Verify your email with Darsana'
@@ -43,34 +48,41 @@ def create_journal_deep_copy(original_journal, user):
         title=original_journal.title,
         description=original_journal.description,
         additional_info=original_journal.additional_info,
-        visibility='private'
+        visibility='private',
+        is_system_created=False
     )
-
-    # Copy associated prompts
-    for prompt in original_journal.journal_prompts.all():
-        new_prompt = JournalPrompt.objects.create(
-            topic=new_journal.topics.first(),  # Assuming the first topic
-            prompt_text=prompt.prompt_text,
-            description=prompt.description,
-            is_answer_required=prompt.is_answer_required,
-            order=prompt.order
+    # Copy associated topics and prompts
+    for topic in original_journal.topics.all():
+        new_topic = new_journal.topics.create(
+            title=topic.title,
+            description=topic.description
         )
-        new_prompt.tags.set(prompt.tags.all())
+        for prompt in topic.prompts.all():
+            new_prompt = JournalPrompt.objects.create(
+                topic=new_topic,
+                prompt_text=prompt.prompt_text,
+                description=prompt.description,
+                is_answer_required=prompt.is_answer_required,
+                order=prompt.order
+            )
+            new_prompt.tags.set(prompt.tags.all())
 
     return new_journal
 
 def copy_default_daily_journals(user):
-    default_journal_ids = [1, 2]
-    for journal_id in default_journal_ids:
+    for journal_id in DEFAULT_JOURNAL_IDS:
         try:
             original_journal = JournalTemplate.objects.get(id=journal_id)
-            new_journal = create_journal_deep_copy(original_journal, user)
-
-            # Set morning and evening journals
-            if journal_id == 1:
+            if journal_id == DEFAULT_MORNING_JOURNAL_ID:
+                new_journal = create_journal_deep_copy(original_journal, user)
                 user.profile.morning_intention = new_journal
-            elif journal_id == 2:
+            elif journal_id == DEFAULT_EVENING_JOURNAL_ID:
+                new_journal = create_journal_deep_copy(original_journal, user)
                 user.profile.evening_reflection = new_journal
-            user.profile.save()
         except JournalTemplate.DoesNotExist:
-            pass
+            if journal_id == DEFAULT_MORNING_JOURNAL_ID:
+                user.profile.morning_intention = None
+            elif journal_id == DEFAULT_EVENING_JOURNAL_ID:
+                user.profile.evening_reflection = None
+
+    user.profile.save()
