@@ -517,8 +517,8 @@ class Profile(models.Model):
         get_user_model(),
         on_delete=models.CASCADE
     )  # Links to the User model
-    name = models.CharField(max_length=255)  # User's display name
-    email = models.EmailField()  # User's email address
+    name = models.CharField(max_length=255, blank=True)  # User's display name
+    email = models.EmailField(blank=True)  # User's email address
     subscription_details = models.CharField(
         max_length=100,
         blank=True,

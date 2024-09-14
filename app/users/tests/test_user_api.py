@@ -7,6 +7,9 @@ from unittest.mock import patch
 from core.models import EmailVerification
 from django.utils import timezone
 from datetime import timedelta
+from core.models import Profile, JournalTemplate
+from django.db import transaction
+from core.utils import copy_default_daily_journals
 
 REGISTER_URL = reverse('register')
 VERIFY_EMAIL_URL = reverse('verify-email')
@@ -408,6 +411,61 @@ class UserApiTests(TestCase):
             'Email not verified. A new verification email has been sent.'
             )
         mock_send.assert_called_once()
+
+    def test_login_creates_profile(self):
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = True
+        user.save()
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        self.assertFalse(Profile.objects.filter(user=user).exists())
+
+        res = self.client.post(LOGIN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(Profile.objects.filter(user=user).exists())
+        profile = Profile.objects.get(user=user)
+        self.assertEqual(profile.email, user.email)
+
+    @patch('core.utils.copy_default_daily_journals')
+    def test_login_copies_default_journals(self, mock_copy_journals):
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = True
+        user.save()
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        res = self.client.post(LOGIN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        mock_copy_journals.assert_called_once_with(user)
+
+    @patch('core.utils.copy_default_daily_journals')
+    def test_login_handles_journal_copy_error(self, mock_copy_journals):
+        mock_copy_journals.side_effect = Exception("Journal copy failed")
+        user = get_user_model().objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        user.is_active = True
+        user.save()
+        payload = {
+            'email': 'test@example.com',
+            'password': 'testpass123'
+        }
+        res = self.client.post(LOGIN_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('token', res.data)
 
     # Password Reset Tests
     def test_forgot_password_existing_email(self):

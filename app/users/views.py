@@ -7,9 +7,9 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import login
-from core.utils import send_verification_email
+from core.utils import send_verification_email, copy_default_daily_journals
 
-from core.models import EmailVerification
+from core.models import EmailVerification, Profile
 from .serializers import (
     CustomRegisterSerializer,
     EmailVerificationSerializer,
@@ -85,7 +85,7 @@ class VerifyEmailView(generics.CreateAPIView):
                 verification_pin=verification_pin,
                 user=user,
             )
-            
+
             if user.is_active and verification.is_verified:
                 return Response(
                     {'detail': 'Email is already verified and account is active.'},
@@ -94,7 +94,7 @@ class VerifyEmailView(generics.CreateAPIView):
 
             if verification.expires_at <= timezone.now():
                 raise ValidationError("Verification pin has expired.")
-            
+
             verification.is_verified = True
             verification.save()
             user.is_active = True
@@ -123,8 +123,22 @@ class LoginView(generics.CreateAPIView):
                 request,
                 user,
                 backend='django.contrib.auth.backends.ModelBackend'
-                )
+            )
             token, created = Token.objects.get_or_create(user=user)
+
+            # Create or update user's profile
+            profile, created = Profile.objects.get_or_create(user=user)
+            profile.email = user.email
+            profile.save()
+
+            # Copy default journals
+            try:
+                with transaction.atomic():
+                    copy_default_daily_journals(user)
+            except Exception:
+                # If copying fails, continue without raising an error
+                pass
+
             return Response({
                 "detail": "Login successful.",
                 "token": token.key
