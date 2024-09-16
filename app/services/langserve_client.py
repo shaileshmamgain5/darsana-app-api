@@ -6,9 +6,9 @@ class LangServeClient:
         self.base_url = settings.LANGSERVE_BASE_URL
         self.api_key = settings.LANGSERVE_API_KEY
 
-    def get_response(self, message):
+    def get_response(self, message, thread_messages=[]):
         """
-        Get AI response for a given message.
+        Get AI response for a given message and optional thread messages.
         """
         endpoint = f"{self.base_url}/chat"
         headers = {
@@ -16,7 +16,8 @@ class LangServeClient:
             "Content-Type": "application/json"
         }
         data = {
-            "message": message
+            "message": message,
+            "thread_messages": thread_messages
         }
 
         try:

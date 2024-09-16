@@ -19,9 +19,11 @@ class GetResponseView(APIView):
         message = request.data.get('message')
         session_id = request.data.get('session_id')
         thread_id = request.data.get('thread_id')
+        thread_messages = request.data.get('thread_messages', [])
 
         if session_id:
             session = ChatSession.objects.get(id=session_id)
+            thread = session.thread
         elif thread_id:
             thread = Thread.objects.get(id=thread_id)
             session = ChatSession.objects.create(thread=thread)
@@ -36,9 +38,14 @@ class GetResponseView(APIView):
             text=message
         )
 
+        # Set cover_message if it's the first message in the thread
+        if not thread.cover_message:
+            thread.cover_message = message
+            thread.save()
+
         # Get AI response
         langserve_client = LangServeClient()
-        ai_response = langserve_client.get_response(message)
+        ai_response = langserve_client.get_response(message, thread_messages)
 
         # Save AI response
         ai_message = ChatMessage.objects.create(
@@ -73,21 +80,21 @@ class EndSessionView(APIView):
     def post(self, request, session_id):
         session = ChatSession.objects.get(id=session_id)
         session.ended_at = timezone.now()
-        
+
         # Get all messages for the session
         messages = list(session.messages.all().values('sender', 'text'))
-        
+
         # Create summary using LangServe API
         langserve_client = LangServeClient()
         summary_response = langserve_client.create_summary(messages)
-        
+
         summary = summary_response.get('summary', "Summary generation failed.")
         thread_title = summary_response.get('thread_title', "New Conversation")
-        
+
         # Update session summary
         session.session_summary = summary
         session.save()
-        
+
         # Update thread title if this is the only session
         thread = session.thread
         if thread.sessions.count() == 1:
