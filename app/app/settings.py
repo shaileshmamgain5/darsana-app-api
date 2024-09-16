@@ -205,3 +205,8 @@ else:
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 
 DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
+
+# Add these lines to your settings.py file
+
+LANGSERVE_BASE_URL = "https://api.langserve.com/v1"  # Replace with actual base URL
+LANGSERVE_API_KEY = "your-api-key-here"  # Replace with actual API key

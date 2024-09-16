@@ -457,6 +457,7 @@ class Thread(models.Model):
           and can contain multiple ChatSessions.
     """
     title = models.CharField(max_length=200)
+    cover_message = models.TextField(blank=True, null=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -477,7 +478,7 @@ class ChatSession(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     # Maintaining the context ChatSessions
-    context = models.JSONField(default=dict, blank=True)
+    session_summary = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"Session for {self.thread.title}"
@@ -486,7 +487,7 @@ class ChatMessage(models.Model):
     chat_session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
     sender = models.CharField(
         max_length=20,
-        choices=[('user', 'User'), ('ai', 'AI')]
+        choices=[('user', 'User'), ('ai', 'AI'), ('system', 'System')]
     )
     text = models.JSONField(default=list)
     timestamp = models.DateTimeField(auto_now_add=True)

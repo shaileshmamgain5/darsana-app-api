@@ -1,0 +1,28 @@
+{
+    
+"featureFlags": {
+      "showPromoBanner": true,
+      "enableBetaFeatures": false
+    },
+    "appVersion": "1.0.0",
+    "apiEndpoints": {
+      "configApi": "https://api.example.com/config",
+      "loginApi": "https://api.example.com/login",
+      "contentApi": "https://api.example.com/content"
+    },
+    "dynamicContent": {
+      "welcomeMessage": "Welcome to the best app experience!",
+      "promoBanner": "Get 20% off on premium features!"
+    },
+    "platformSpecific": {
+      "ios": {
+        "minimumSupportedVersion": "14.0",
+        "appStoreLink": "https://apps.apple.com/app/id123456789"
+      },
+      "android": {
+        "minimumSupportedVersion": "10.0",
+        "playStoreLink": "https://play.google.com/store/apps/details?id=com.example.myapp"
+      }
+    }
+}
+  

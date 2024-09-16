@@ -1,74 +1,127 @@
-from rest_framework import generics, permissions
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.generics import ListAPIView, RetrieveAPIView, DestroyAPIView
 from core.models import Thread, ChatSession, ChatMessage
-from .serializers import ThreadSerializer, ChatSessionSerializer, ChatMessageSerializer
+from .serializers import (
+    ChatMessageSerializer,
+    ChatSessionSerializer,
+    ThreadSerializer,
+    ThreadListSerializer
+)
+from services.langserve_client import LangServeClient  # You'll need to implement this
 from django.utils import timezone
-from rest_framework.exceptions import PermissionDenied
+from django.db.models import Prefetch
 
-class ThreadListCreateView(generics.ListCreateAPIView):
-    serializer_class = ThreadSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return Thread.objects.filter(user=self.request.user)
+class GetResponseView(APIView):
+    def post(self, request):
+        message = request.data.get('message')
+        session_id = request.data.get('session_id')
+        thread_id = request.data.get('thread_id')
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-class ThreadDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = ThreadSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return Thread.objects.filter(user=self.request.user)
-
-class ChatSessionListCreateView(generics.ListCreateAPIView):
-    serializer_class = ChatSessionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        thread_id = self.kwargs['thread_id']
-        return ChatSession.objects.filter(thread_id=thread_id, thread__user=self.request.user)
-
-    def perform_create(self, serializer):
-        thread_id = self.kwargs['thread_id']
-        thread = Thread.objects.get(id=thread_id)
-        if thread.user != self.request.user:
-            raise PermissionDenied(
-                "You do not have permission to create a \
-                    chat session for this thread."
-            )
-        serializer.save(thread_id=thread_id)
-
-class ChatSessionDetailView(generics.RetrieveUpdateAPIView):
-    serializer_class = ChatSessionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return ChatSession.objects.filter(thread__user=self.request.user)
-
-    def perform_update(self, serializer):
-        if 'ended_at' in self.request.data and not serializer.instance.ended_at:
-            serializer.save(ended_at=timezone.now())
+        if session_id:
+            session = ChatSession.objects.get(id=session_id)
+        elif thread_id:
+            thread = Thread.objects.get(id=thread_id)
+            session = ChatSession.objects.create(thread=thread)
         else:
-            serializer.save()
+            thread = Thread.objects.create(user=request.user, title="New Conversation")
+            session = ChatSession.objects.create(thread=thread)
 
-class ChatMessageListCreateView(generics.ListCreateAPIView):
-    serializer_class = ChatMessageSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        session_id = self.kwargs['session_id']
-        return ChatMessage.objects.filter(
-            chat_session_id=session_id,
-            chat_session__thread__user=self.request.user
+        # Save user message
+        user_message = ChatMessage.objects.create(
+            chat_session=session,
+            sender='user',
+            text=message
         )
 
-    def perform_create(self, serializer):
-        session_id = self.kwargs['session_id']
-        chat_session = ChatSession.objects.get(id=session_id)
-        if chat_session.thread.user != self.request.user:
-            raise PermissionDenied(
-                "You do not have permission to create a \
-                    message for this chat session."
-            )
-        serializer.save(chat_session_id=session_id)
+        # Get AI response
+        langserve_client = LangServeClient()
+        ai_response = langserve_client.get_response(message)
+
+        # Save AI response
+        ai_message = ChatMessage.objects.create(
+            chat_session=session,
+            sender='ai',
+            text=ai_response
+        )
+
+        return Response({
+            'session_id': session.id,
+            'thread_id': session.thread.id,
+            'ai_response': ChatMessageSerializer(ai_message).data
+        })
+
+
+class CancelResponseView(APIView):
+    def post(self, request, message_id):
+        message = ChatMessage.objects.get(id=message_id)
+        langserve_client = LangServeClient()
+        langserve_client.cancel_response(message_id)
+
+        system_message = ChatMessage.objects.create(
+            chat_session=message.chat_session,
+            sender='system',
+            text='Response cancelled'
+        )
+
+        return Response(ChatMessageSerializer(system_message).data)
+
+
+class EndSessionView(APIView):
+    def post(self, request, session_id):
+        session = ChatSession.objects.get(id=session_id)
+        session.ended_at = timezone.now()
+        
+        # Get all messages for the session
+        messages = list(session.messages.all().values('sender', 'text'))
+        
+        # Create summary using LangServe API
+        langserve_client = LangServeClient()
+        summary_response = langserve_client.create_summary(messages)
+        
+        summary = summary_response.get('summary', "Summary generation failed.")
+        thread_title = summary_response.get('thread_title', "New Conversation")
+        
+        # Update session summary
+        session.session_summary = summary
+        session.save()
+        
+        # Update thread title if this is the only session
+        thread = session.thread
+        if thread.sessions.count() == 1:
+            thread.title = thread_title
+            thread.save()
+
+        return Response({
+            'message': 'Session ended',
+            'summary': summary,
+            'thread_title': thread_title
+        })
+
+
+class ThreadListView(ListAPIView):
+    serializer_class = ThreadListSerializer
+
+    def get_queryset(self):
+        return Thread.objects.filter(user=self.request.user).order_by('-updated_at')
+
+
+class ThreadDetailView(RetrieveAPIView):
+    serializer_class = ThreadSerializer
+
+    def get_queryset(self):
+        return Thread.objects.filter(user=self.request.user).prefetch_related(
+            Prefetch('sessions', queryset=ChatSession.objects.order_by('started_at').prefetch_related(
+                Prefetch('messages', queryset=ChatMessage.objects.order_by('timestamp'))
+            ))
+        )
+
+
+class DeleteThreadView(DestroyAPIView):
+    queryset = Thread.objects.all()
+
+    def perform_destroy(self, instance):
+        # This will cascade delete all associated sessions and messages
+        instance.delete()

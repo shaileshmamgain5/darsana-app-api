@@ -35,17 +35,21 @@ urlpatterns = [
         name='api-docs'
     ),
     path('api/users/', include('users.urls')),
-    path('api/journals/', include('journals.urls')),
-    path('api/goals/', include('goals.urls')),
-    path('api/categories/', include('categories.urls')),
-    path('api/tags/', include('tags.urls')),
     path('api/profiles/', include('profiles.urls')),
     path('api/chats/', include('chats.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),
-    path('api/prompts/', include('prompts.urls')),
     path('api/appconfig/', include('appconfig.urls')),
-    path('api/mood/', include('moods.urls')),
 ]
+
+"""
+To be added paths
+path('api/journals/', include('journals.urls')), \
+path('api/goals/', include('goals.urls')), \
+path('api/categories/', include('categories.urls')), \
+path('api/prompts/', include('prompts.urls')), \
+path('api/mood/', include('moods.urls')), \
+path('api/tags/', include('tags.urls')),
+"""
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
