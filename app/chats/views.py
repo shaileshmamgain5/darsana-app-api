@@ -12,9 +12,11 @@ from .serializers import (
 from services.langserve_client import LangServeClient  # You'll need to implement this
 from django.utils import timezone
 from django.db.models import Prefetch
+from rest_framework.permissions import IsAuthenticated
 
 
 class GetResponseView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         message = request.data.get('message')
         session_id = request.data.get('session_id')
@@ -62,6 +64,7 @@ class GetResponseView(APIView):
 
 
 class CancelResponseView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request, message_id):
         message = ChatMessage.objects.get(id=message_id)
         langserve_client = LangServeClient()
@@ -77,6 +80,7 @@ class CancelResponseView(APIView):
 
 
 class EndSessionView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request, session_id):
         session = ChatSession.objects.get(id=session_id)
         session.ended_at = timezone.now()
@@ -109,6 +113,7 @@ class EndSessionView(APIView):
 
 
 class ThreadListView(ListAPIView):
+    permission_classes = [IsAuthenticated]
     serializer_class = ThreadListSerializer
 
     def get_queryset(self):
@@ -116,6 +121,7 @@ class ThreadListView(ListAPIView):
 
 
 class ThreadDetailView(RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
     serializer_class = ThreadSerializer
 
     def get_queryset(self):
@@ -127,6 +133,7 @@ class ThreadDetailView(RetrieveAPIView):
 
 
 class DeleteThreadView(DestroyAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Thread.objects.all()
 
     def perform_destroy(self, instance):
