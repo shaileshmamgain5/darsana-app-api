@@ -5,14 +5,18 @@ class LangServeClient:
     def __init__(self):
         self.base_url = settings.LANGSERVE_BASE_URL
 
-    def get_response(self, message, thread_messages=[]):
+    def get_response(self, message, thread_messages=[], configuration_name=None):
         """
         Get AI response for a given message and optional thread messages.
         """
-        endpoint = f"{self.base_url}/chain/invoke"
+        endpoint = f"{self.base_url}/chain"
         headers = {
             "Content-Type": "application/json"
         }
+        
+        if configuration_name:
+            endpoint += f"/{configuration_name}/invoke"
+        
         data = {
             "input": {
                 "question": message,

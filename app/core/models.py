@@ -479,6 +479,7 @@ class ChatSession(models.Model):
     ended_at = models.DateTimeField(null=True, blank=True)
     # Maintaining the context ChatSessions
     session_summary = models.TextField(blank=True, null=True)
+    last_activity = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Session for {self.thread.title}"
@@ -496,6 +497,29 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"Message from {self.sender} in {self.chat_session}"
+
+
+class ModelConfiguration(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    model = models.CharField(max_length=50)
+    temperature = models.FloatField()
+    question_prompt = models.TextField()
+    response_prompt = models.TextField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+class PerformanceMetric(models.Model):
+    configuration = models.ForeignKey(ModelConfiguration, on_delete=models.CASCADE)
+    average_response_time = models.FloatField(default=0)
+    average_session_length = models.FloatField(default=0)
+    like_count = models.IntegerField(default=0)
+    dislike_count = models.IntegerField(default=0)
+    total_messages = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"Metrics for {self.configuration.name}"
 
 
 # Moods

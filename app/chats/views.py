@@ -2,7 +2,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.generics import ListAPIView, RetrieveAPIView, DestroyAPIView
-from core.models import Thread, ChatSession, ChatMessage
+from core.models import (
+    Thread,
+    ChatSession,
+    ChatMessage,
+    ModelConfiguration,
+    PerformanceMetric
+)
 from .serializers import (
     ChatMessageSerializer,
     ChatSessionSerializer,
@@ -17,6 +23,8 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExampl
 from drf_spectacular.types import OpenApiTypes
 
 import requests
+import time
+from services.chat_service import ChatService
 
 
 class GetResponseView(APIView):
@@ -72,59 +80,25 @@ class GetResponseView(APIView):
             return Response({'error': 'Message is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            if session_id:
-                session = ChatSession.objects.get(id=session_id)
-                thread = session.thread
-            elif thread_id:
-                thread = Thread.objects.get(id=thread_id)
-                session = ChatSession.objects.create(thread=thread)
-            else:
-                thread = Thread.objects.create(user=request.user, title="New Conversation")
-                session = ChatSession.objects.create(thread=thread)
-
-            # Save user message
-            user_message = ChatMessage.objects.create(
-                chat_session=session,
-                sender='user',
-                text=message
-            )
-
-            # Set cover_message if it's the first message in the thread
-            if not thread.cover_message:
-                thread.cover_message = message
-                thread.save()
-
-            # Get AI response
-            langserve_client = LangServeClient()
-            thread_messages = list(session.messages.order_by('timestamp').values_list('sender', 'text'))
-            try:
-                ai_response = langserve_client.get_response(message, thread_messages)
-            except requests.ConnectionError as e:
-                return Response({'error': 'Unable to connect to assistant service'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-            except requests.Timeout:
-                return Response({'error': 'Assistant service request timed out'}, status=status.HTTP_504_GATEWAY_TIMEOUT)
-            except requests.HTTPError as e:
-                return Response({'error': f'Assistant service error: {e.response.status_code}'}, status=status.HTTP_502_BAD_GATEWAY)
-            except requests.RequestException as e:
-                return Response({'error': 'Error processing assistant response'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-            # Save AI response
-            ai_message = ChatMessage.objects.create(
-                chat_session=session,
-                sender='assistant',
-                text=ai_response
-            )
-
-            return Response({
-                'session_id': session.id,
-                'thread_id': session.thread.id,
-                'ai_response': ChatMessageSerializer(ai_message).data
-            })
-
-        except (ChatSession.DoesNotExist, Thread.DoesNotExist):
-            return Response({'error': 'Invalid session_id or thread_id'}, status=status.HTTP_404_NOT_FOUND)
+            chat_service = ChatService(request.user)
+            response_data = chat_service.process_message(message, session_id, thread_id)
+            return Response(response_data)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return self.handle_error(e)
+
+    def handle_error(self, exception):
+        if isinstance(exception, (ChatSession.DoesNotExist, Thread.DoesNotExist)):
+            return Response({'error': 'Invalid session_id or thread_id'}, status=status.HTTP_404_NOT_FOUND)
+        elif isinstance(exception, requests.ConnectionError):
+            return Response({'error': 'Unable to connect to assistant service'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        elif isinstance(exception, requests.Timeout):
+            return Response({'error': 'Assistant service request timed out'}, status=status.HTTP_504_GATEWAY_TIMEOUT)
+        elif isinstance(exception, requests.HTTPError):
+            return Response({'error': f'Assistant service error: {exception.response.status_code}'}, status=status.HTTP_502_BAD_GATEWAY)
+        elif isinstance(exception, requests.RequestException):
+            return Response({'error': 'Error processing assistant response'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({'error': str(exception)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CancelResponseView(APIView):
@@ -203,3 +177,23 @@ class DeleteThreadView(DestroyAPIView):
     def perform_destroy(self, instance):
         # This will cascade delete all associated sessions and messages
         instance.delete()
+
+
+class FeedbackView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, message_id):
+        message = ChatMessage.objects.get(id=message_id)
+        feedback = request.data.get('feedback')
+        
+        configuration = ModelConfiguration.objects.filter(is_active=True).first()
+        metric = PerformanceMetric.objects.get(configuration=configuration)
+        
+        if feedback == 'like':
+            metric.like_count += 1
+        elif feedback == 'dislike':
+            metric.dislike_count += 1
+        
+        metric.save()
+        
+        return Response({'status': 'Feedback recorded'})
