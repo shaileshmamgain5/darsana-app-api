@@ -208,5 +208,4 @@ DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
 
 # Add these lines to your settings.py file
 
-LANGSERVE_BASE_URL = "https://api.langserve.com/v1"  # Replace with actual base URL
-LANGSERVE_API_KEY = "your-api-key-here"  # Replace with actual API key
+LANGSERVE_BASE_URL = "http://ai-assistant:9000"  # Replace 'ai-assistant' with the actual service name

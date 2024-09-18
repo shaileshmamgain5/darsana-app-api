@@ -487,7 +487,7 @@ class ChatMessage(models.Model):
     chat_session = models.ForeignKey(ChatSession, on_delete=models.CASCADE, related_name='messages')
     sender = models.CharField(
         max_length=20,
-        choices=[('user', 'User'), ('ai', 'AI'), ('system', 'System')]
+        choices=[('user', 'User'), ('assistant', 'Assistant'), ('system', 'System')]
     )
     text = models.JSONField(default=list)
     timestamp = models.DateTimeField(auto_now_add=True)

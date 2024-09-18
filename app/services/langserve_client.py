@@ -4,64 +4,40 @@ from django.conf import settings
 class LangServeClient:
     def __init__(self):
         self.base_url = settings.LANGSERVE_BASE_URL
-        self.api_key = settings.LANGSERVE_API_KEY
 
     def get_response(self, message, thread_messages=[]):
         """
         Get AI response for a given message and optional thread messages.
         """
-        endpoint = f"{self.base_url}/chat"
+        endpoint = f"{self.base_url}/chain/invoke"
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         data = {
-            "message": message,
-            "thread_messages": thread_messages
+            "input": {
+                "question": message,
+                "chat_history": thread_messages
+            }
         }
 
-        try:
-            response = requests.post(endpoint, json=data, headers=headers)
-            response.raise_for_status()
-            return response.json()["response"]
-        except requests.RequestException as e:
-            print(f"Error getting AI response: {e}")
-            return "I'm sorry, I'm having trouble processing your request right now."
+        response = requests.post(endpoint, json=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()["output"]
 
     def cancel_response(self, message_id):
         """
         Cancel an ongoing AI response generation.
         """
-        endpoint = f"{self.base_url}/cancel/{message_id}"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}"
-        }
-
-        try:
-            response = requests.post(endpoint, headers=headers)
-            response.raise_for_status()
-            return True
-        except requests.RequestException as e:
-            print(f"Error cancelling AI response: {e}")
-            return False
+        # The ai-assistant service doesn't support cancellation, so we'll just return True
+        return True
 
     def create_summary(self, messages):
         """
-        Create a summary for a list of messages.
+        Create a summary of the chat session.
         """
-        endpoint = f"{self.base_url}/create_summary"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+        # This method would need to be implemented in the ai-assistant service
+        # For now, we'll just return a placeholder
+        return {
+            "summary": "Chat session summary not implemented yet.",
+            "thread_title": "New Conversation"
         }
-        data = {
-            "messages": messages
-        }
-
-        try:
-            response = requests.post(endpoint, json=data, headers=headers)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as e:
-            print(f"Error creating summary: {e}")
-            return {"summary": "Failed to generate summary", "thread_title": "New Conversation"}
