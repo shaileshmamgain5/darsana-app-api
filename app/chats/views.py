@@ -82,7 +82,8 @@ class GetResponseView(APIView):
         try:
             chat_service = ChatService(request.user)
             response_data = chat_service.process_message(message, session_id, thread_id)
-            return Response(response_data)
+            if response_data:
+                return Response(response_data)
         except Exception as e:
             return self.handle_error(e)
 
@@ -103,18 +104,29 @@ class GetResponseView(APIView):
 
 class CancelResponseView(APIView):
     permission_classes = [IsAuthenticated]
-    def post(self, request, message_id):
-        message = ChatMessage.objects.get(id=message_id)
-        langserve_client = LangServeClient()
-        langserve_client.cancel_response(message_id)
 
-        system_message = ChatMessage.objects.create(
-            chat_session=message.chat_session,
-            sender='system',
-            text='Response cancelled'
-        )
+    def post(self, request, thread_id):
+        try:
+            thread = Thread.objects.get(id=thread_id, user=request.user)
+            latest_user_message = ChatMessage.objects.filter(
+                chat_session__thread=thread,
+                sender='user'
+            ).order_by('-timestamp').first()
 
-        return Response(ChatMessageSerializer(system_message).data)
+            if not latest_user_message:
+                return Response({'error': 'No user message found in this thread'}, status=status.HTTP_404_NOT_FOUND)
+
+            ChatService.cancel_request(request.user.id, latest_user_message.text)
+
+            system_message = ChatMessage.objects.create(
+                chat_session=latest_user_message.chat_session,
+                sender='system',
+                text='Response cancelled'
+            )
+
+            return Response(ChatMessageSerializer(system_message).data)
+        except Thread.DoesNotExist:
+            return Response({'error': 'Thread not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class EndSessionView(APIView):
@@ -185,15 +197,15 @@ class FeedbackView(APIView):
     def post(self, request, message_id):
         message = ChatMessage.objects.get(id=message_id)
         feedback = request.data.get('feedback')
-        
+
         configuration = ModelConfiguration.objects.filter(is_active=True).first()
         metric = PerformanceMetric.objects.get(configuration=configuration)
-        
+
         if feedback == 'like':
             metric.like_count += 1
         elif feedback == 'dislike':
             metric.dislike_count += 1
-        
+
         metric.save()
-        
+
         return Response({'status': 'Feedback recorded'})
