@@ -10,3 +10,4 @@ python-dotenv==1.0.1
 langchain
 openai
 langchain-openai
+uwsgi>=2.0.19,<2.1

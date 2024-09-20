@@ -30,6 +30,12 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = []
+ALLOWED_HOSTS.extend(
+    filter(
+        None,
+        os.getenv('DJANGO_ALLOWED_HOSTS', '').split(','),
+    )
+)
 
 
 # Application definition
