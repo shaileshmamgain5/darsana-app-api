@@ -1,6 +1,6 @@
 from assistant.agents.simple_qna_agent import invoke_chain
 
-class LangServeClient:
+class AssistantService:
     def __init__(self):
         pass  # We don't need the base_url anymore
 

@@ -205,7 +205,3 @@ else:
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 
 DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
-
-# Add these lines to your settings.py file
-
-LANGSERVE_BASE_URL = "http://ai-assistant:9000"  # Replace 'ai-assistant' with the actual service name

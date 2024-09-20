@@ -15,7 +15,7 @@ from .serializers import (
     ThreadSerializer,
     ThreadListSerializer
 )
-from services.langserve_client import LangServeClient  # You'll need to implement this
+from services.assistant_service import AssistantService  # You'll need to implement this
 from django.utils import timezone
 from django.db.models import Prefetch
 from rest_framework.permissions import IsAuthenticated
@@ -139,8 +139,8 @@ class EndSessionView(APIView):
         messages = list(session.messages.all().values('sender', 'text'))
 
         # Create summary using LangServe API
-        langserve_client = LangServeClient()
-        summary_response = langserve_client.create_summary(messages)
+        assistant_service = AssistantService()
+        summary_response = assistant_service.create_summary(messages)
 
         summary = summary_response.get('summary', "Summary generation failed.")
         thread_title = summary_response.get('thread_title', "New Conversation")

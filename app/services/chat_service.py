@@ -1,6 +1,6 @@
 from core.models import Thread, ChatSession, ChatMessage, ModelConfiguration, PerformanceMetric
 from chats.serializers import ChatMessageSerializer
-from services.langserve_client import LangServeClient
+from services.assistant_service import AssistantService
 import time
 
 class ChatService:
@@ -8,7 +8,7 @@ class ChatService:
 
     def __init__(self, user):
         self.user = user
-        self.langserve_client = LangServeClient()
+        self.assistant_service = AssistantService()
 
     @classmethod
     def cancel_request(cls, user_id, message_text):
@@ -70,7 +70,7 @@ class ChatService:
 
     def _get_ai_response(self, message, thread_messages):
         configuration = ModelConfiguration.objects.filter(is_active=True).first()
-        return self.langserve_client.get_response(message, thread_messages, configuration.name)
+        return self.assistant_service.get_response(message, thread_messages, configuration.name)
 
     def _save_ai_message(self, session, ai_response):
         return ChatMessage.objects.create(
