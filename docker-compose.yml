@@ -27,10 +27,8 @@ services:
       - DB_NAME=devdb
       - DB_USER=devuser
       - DB_PASS=changeme
-      - LANGSERVE_BASE_URL=http://ai-assistant:9000
     depends_on:
       - db
-      - ai-assistant
     env_file:
       - ../.env
 
@@ -42,19 +40,6 @@ services:
       - POSTGRES_DB=devdb
       - POSTGRES_USER=devuser
       - POSTGRES_PASSWORD=changeme
-
-  ai-assistant:
-    image: ai-assistant:latest
-    build:
-      context: ../ai-assistant
-      dockerfile: Dockerfile
-    ports:
-      - "9000:9000"
-    command: python main.py
-    volumes:
-      - ../ai-assistant/app:/app
-    env_file:
-      - ../.env
 
 volumes:
   dev-db-data:

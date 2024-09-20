@@ -1,45 +1,38 @@
-import requests
-from django.conf import settings
+from assistant.agents.simple_qna_agent import invoke_chain
 
 class LangServeClient:
     def __init__(self):
-        self.base_url = settings.LANGSERVE_BASE_URL
+        pass  # We don't need the base_url anymore
 
     def get_response(self, message, thread_messages=[], configuration_name=None):
         """
         Get AI response for a given message and optional thread messages.
         """
-        endpoint = f"{self.base_url}/chain"
-        headers = {
-            "Content-Type": "application/json"
-        }
+        config = self.get_configuration(configuration_name)
         
-        if configuration_name:
-            endpoint += f"/{configuration_name}/invoke"
-        
-        data = {
-            "input": {
-                "question": message,
-                "chat_history": thread_messages
-            }
-        }
+        return invoke_chain(message, thread_messages, config)
 
-        response = requests.post(endpoint, json=data, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()["output"]
+    def get_configuration(self, configuration_name):
+        # This method should retrieve the configuration based on the name
+        # For now, we'll use a default configuration
+        return {
+            "temperature": 0.7,
+            "model": "gpt-4o-mini"
+        }
 
     def cancel_response(self, message_id):
         """
         Cancel an ongoing AI response generation.
         """
-        # The ai-assistant service doesn't support cancellation, so we'll just return True
+        # This method is not applicable in the current implementation
+        # You might want to implement a cancellation mechanism if needed
         return True
 
     def create_summary(self, messages):
         """
         Create a summary of the chat session.
         """
-        # This method would need to be implemented in the ai-assistant service
+        # This method would need to be implemented separately
         # For now, we'll just return a placeholder
         return {
             "summary": "Chat session summary not implemented yet.",
