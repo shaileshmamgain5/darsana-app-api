@@ -16,6 +16,8 @@ services:
       - ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS}
     depends_on:
       - db
+    env_file:
+      - .env
 
   db:
     image: postgres:13-alpine
@@ -26,7 +28,7 @@ services:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASS}
-  
+
   proxy:
     build:
       context: ./proxy

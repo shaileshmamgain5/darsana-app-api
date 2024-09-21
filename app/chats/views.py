@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.generics import ListAPIView, RetrieveAPIView, DestroyAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView, DestroyAPIView, GenericAPIView
 from core.models import (
     Thread,
     ChatSession,
@@ -102,8 +102,9 @@ class GetResponseView(APIView):
             return Response({'error': str(exception)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class CancelResponseView(APIView):
+class CancelResponseView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = ChatMessageSerializer
 
     def post(self, request, thread_id):
         try:
@@ -129,8 +130,10 @@ class CancelResponseView(APIView):
             return Response({'error': 'Thread not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
-class EndSessionView(APIView):
+class EndSessionView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = ChatSessionSerializer
+
     def post(self, request, session_id):
         session = ChatSession.objects.get(id=session_id)
         session.ended_at = timezone.now()
@@ -191,8 +194,9 @@ class DeleteThreadView(DestroyAPIView):
         instance.delete()
 
 
-class FeedbackView(APIView):
+class FeedbackView(GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = ChatMessageSerializer
 
     def post(self, request, message_id):
         message = ChatMessage.objects.get(id=message_id)
