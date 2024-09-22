@@ -40,6 +40,12 @@ urlpatterns = [
     path('api/chats/', include('chats.urls')),
     path('api/subscriptions/', include('subscriptions.urls')),
     path('api/appconfig/', include('appconfig.urls')),
+    path('api/journals/', include('journals.urls')),
+    path('api/goals/', include('goals.urls')),
+    path('api/categories/', include('categories.urls')),
+    path('api/prompts/', include('prompts.urls')),
+    path('api/mood/', include('moods.urls')),
+    path('api/tags/', include('tags.urls')),
 ]
 
 """
