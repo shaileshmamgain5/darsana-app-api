@@ -1,5 +1,5 @@
 from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from core.models import AppConfiguration
 from .serializers import AppConfigurationSerializer
 from core.permissions import IsStaffOrSuperuser
@@ -15,6 +15,7 @@ class AppConfigurationListCreateView(generics.ListCreateAPIView):
 
 class ActiveAppConfigurationView(generics.RetrieveAPIView):
     serializer_class = AppConfigurationSerializer
+    permission_classes = [AllowAny]
 
     def get_object(self):
         return AppConfiguration.objects.filter(is_active=True).first()
