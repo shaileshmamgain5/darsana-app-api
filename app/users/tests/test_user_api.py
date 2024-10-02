@@ -112,7 +112,7 @@ class UserApiTests(TestCase):
             status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         self.assertEqual(
-            res.data['detail'],
+            res.data['error'],
             'An error occurred during registration. Please try again.'
             )
         self.assertFalse(
@@ -386,7 +386,7 @@ class UserApiTests(TestCase):
         res = self.client.post(LOGIN_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertIn('token', res.data)
+        self.assertIn('access', res.data)
 
     def test_login_unverified_user(self):
         # Test login attempt with unverified user
@@ -465,7 +465,7 @@ class UserApiTests(TestCase):
         res = self.client.post(LOGIN_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertIn('token', res.data)
+        self.assertIn('access', res.data)
         mock_copy_journals.assert_called_with(user)
 
     # Password Reset Tests

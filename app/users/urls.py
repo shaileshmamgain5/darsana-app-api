@@ -8,7 +8,8 @@ from .views import (
     ResendVerificationView,
     UserDetailView,
     UserDeleteView,
-    CSRFTokenView
+    CSRFTokenView,
+    TokenRefreshView
 )
 
 urlpatterns = [
@@ -33,4 +34,5 @@ urlpatterns = [
     path('me/', UserDetailView.as_view(), name='user-detail'),
     path('me/delete/', UserDeleteView.as_view(), name='user-delete'),
     path('csrf-token/', CSRFTokenView.as_view(), name='csrf-token'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
 ]

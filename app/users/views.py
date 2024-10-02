@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
+from datetime import timedelta  # Add this import
 
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
@@ -57,7 +58,7 @@ class RegisterView(generics.CreateAPIView):
         except Exception as e:
             print(f"An error occurred during registration: {e}")
             return Response(
-                {"detail": "An error occurred during registration. Please try again."}, # noqa
+                {"error": "An error occurred during registration. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -145,7 +146,8 @@ class LoginView(generics.CreateAPIView):
 
             return Response({
                 "detail": "Login successful.",
-                "token": token.key
+                "access": token.key,
+                "email": user.email
             }, status=status.HTTP_200_OK)
         else:
             verification, created = EmailVerification.objects.get_or_create(user=user) # noqa
@@ -294,3 +296,27 @@ class CSRFTokenView(APIView):
     def get(self, request):
         csrf_token = get_token(request)
         return Response({'csrfToken': csrf_token})
+
+
+class TokenRefreshView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        token = request.auth
+        if token:
+            # Check if the token is older than 23 hours
+            if token.created < timezone.now() - timedelta(hours=23):
+                # Delete the old token
+                token.delete()
+                # Create a new token
+                new_token = Token.objects.create(user=request.user)
+                return Response({
+                    'access': new_token.key,
+                    'email': request.user.email
+                })
+            else:
+                return Response({
+                    'access': token.key,
+                    'email': request.user.email
+                })
+        return Response({'detail': 'No valid token found'}, status=status.HTTP_400_BAD_REQUEST)
