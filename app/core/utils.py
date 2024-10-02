@@ -31,7 +31,7 @@ def send_verification_email(user, verification_pin):
                 )
         else:
             print(
-                f"Sending email to {user.email} with subject: {subject} from {from_email}" # noqa
+                f"Sending email to {user.email} with subject: {subject} from {from_email}: {verification_pin}" # noqa
                 )
             send_mail(
                 subject,
