@@ -512,6 +512,11 @@ class UserApiTests(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.check_password('newpassword123'))
 
+    def test_csrf_token_api(self):
+        res = self.client.get(reverse('csrf-token'))
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('csrfToken', res.data)
+
 
 class PrivateUserApiTests(TestCase):
     def setUp(self):
