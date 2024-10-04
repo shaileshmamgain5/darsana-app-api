@@ -11,3 +11,5 @@ langchain
 openai
 langchain-openai
 uwsgi>=2.0.19,<2.1
+django-cors-headers==4.4.0
+tiktoken==0.7.0
