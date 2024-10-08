@@ -70,19 +70,20 @@ def create_journal_deep_copy(original_journal, user):
     return new_journal
 
 def copy_default_daily_journals(user):
-    for journal_id in DEFAULT_JOURNAL_IDS:
-        try:
-            original_journal = JournalTemplate.objects.get(id=journal_id)
-            if journal_id == DEFAULT_MORNING_JOURNAL_ID:
-                new_journal = create_journal_deep_copy(original_journal, user)
-                user.profile.morning_intention = new_journal
-            elif journal_id == DEFAULT_EVENING_JOURNAL_ID:
-                new_journal = create_journal_deep_copy(original_journal, user)
-                user.profile.evening_reflection = new_journal
-        except JournalTemplate.DoesNotExist:
-            if journal_id == DEFAULT_MORNING_JOURNAL_ID:
-                user.profile.morning_intention = None
-            elif journal_id == DEFAULT_EVENING_JOURNAL_ID:
-                user.profile.evening_reflection = None
+    if not user.profile.morning_intention or not user.profile.evening_reflection:
+        for journal_id in DEFAULT_JOURNAL_IDS:
+            try:
+                original_journal = JournalTemplate.objects.get(id=journal_id)
+                if journal_id == DEFAULT_MORNING_JOURNAL_ID and not user.profile.morning_intention:
+                    new_journal = create_journal_deep_copy(original_journal, user)
+                    user.profile.morning_intention = new_journal
+                elif journal_id == DEFAULT_EVENING_JOURNAL_ID and not user.profile.evening_reflection:
+                    new_journal = create_journal_deep_copy(original_journal, user)
+                    user.profile.evening_reflection = new_journal
+            except JournalTemplate.DoesNotExist:
+                if journal_id == DEFAULT_MORNING_JOURNAL_ID:
+                    user.profile.morning_intention = None
+                elif journal_id == DEFAULT_EVENING_JOURNAL_ID:
+                    user.profile.evening_reflection = None
 
     user.profile.save()

@@ -10,15 +10,6 @@ from core.models import (
 
 from categories.serializers import CategorySerializer
 
-class JournalTopicSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = JournalTopic
-        fields = [
-            'id',
-            'title',
-            'description'
-        ]
-
 class JournalPromptSerializer(serializers.ModelSerializer):
     class Meta:
         model = JournalPrompt
@@ -31,9 +22,38 @@ class JournalPromptSerializer(serializers.ModelSerializer):
             'order'
         ]
 
+class JournalTopicSerializer(serializers.ModelSerializer):
+    prompts = JournalPromptSerializer(many=True)
+
+    class Meta:
+        model = JournalTopic
+        fields = [
+            'id',
+            'title',
+            'description',
+            'prompts'
+        ]
+
+    def create(self, validated_data):
+        prompts_data = validated_data.pop('prompts', [])
+        topic = JournalTopic.objects.create(**validated_data)
+        for prompt_data in prompts_data:
+            tags = prompt_data.pop('tags', [])
+            prompt = JournalPrompt.objects.create(topic=topic, **prompt_data)
+            prompt.tags.set(tags)
+        return topic
+
+    def update(self, instance, validated_data):
+        prompts_data = validated_data.pop('prompts', [])
+        instance.prompts.all().delete()
+        for prompt_data in prompts_data:
+            tags = prompt_data.pop('tags', [])
+            prompt = JournalPrompt.objects.create(topic=instance, **prompt_data)
+            prompt.tags.set(tags)
+        return super().update(instance, validated_data)
+
 class JournalTemplateSerializer(serializers.ModelSerializer):
-    topics = JournalTopicSerializer(many=True, read_only=True)
-    base_prompts = JournalPromptSerializer(many=True, read_only=True)
+    topics = JournalTopicSerializer(many=True)
     categories = CategorySerializer(many=True, read_only=True)
     category_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -48,21 +68,46 @@ class JournalTemplateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'title', 'description', 'additional_info',
             'cover_image', 'visibility', 'tags', 'is_system_created',
-            'topics', 'base_prompts', 'categories', 'category_ids'
+            'topics', 'categories', 'category_ids'
         ]
         read_only_fields = ['id', 'user', 'is_system_created']
 
     def create(self, validated_data):
         categories = validated_data.pop('category', [])
+        topics_data = validated_data.pop('topics', [])
         journal_template = JournalTemplate.objects.create(**validated_data)
         journal_template.category.set(categories)
+        self._create_topics_and_prompts(journal_template, topics_data)
         return journal_template
 
     def update(self, instance, validated_data):
         categories = validated_data.pop('category', None)
-        instance = super().update(instance, validated_data)
+        topics_data = validated_data.pop('topics', [])
+        tags = validated_data.pop('tags', None)
+
+        #ignore the id if provided
+        validated_data.pop('id', None)
+
+        # Update the JournalTemplate fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update categories if provided
         if categories is not None:
             instance.category.set(categories)
+
+        # Update tags if provided
+        if tags is not None:
+            instance.tags.set(tags)
+
+        # Update topics and prompts
+        instance.topics.all().delete()
+        for topic_data in topics_data:
+            topic_serializer = JournalTopicSerializer(data=topic_data)
+            if topic_serializer.is_valid():
+                topic_serializer.save(journal=instance)
+
         return instance
 
 class PromptEntrySerializer(serializers.ModelSerializer):

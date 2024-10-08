@@ -4,8 +4,8 @@ from .views import JournalTemplateViewSet, JournalTopicViewSet, JournalPromptVie
 
 router = DefaultRouter()
 router.register(r'templates', JournalTemplateViewSet)
-router.register(r'topics', JournalTopicViewSet)
-router.register(r'prompts', JournalPromptViewSet)
+#router.register(r'topics', JournalTopicViewSet)
+#router.register(r'prompts', JournalPromptViewSet)
 router.register(r'entries', JournalEntryViewSet, basename='journal-entry')
 router.register(r'prompt-entries', PromptEntryViewSet, basename='prompt-entry')
 
