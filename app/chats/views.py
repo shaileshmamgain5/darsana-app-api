@@ -188,6 +188,7 @@ class ThreadDetailView(RetrieveAPIView):
 class DeleteThreadView(DestroyAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Thread.objects.all()
+    serializer_class = ThreadSerializer
 
     def perform_destroy(self, instance):
         # This will cascade delete all associated sessions and messages

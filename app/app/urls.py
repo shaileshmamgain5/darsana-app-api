@@ -46,6 +46,7 @@ urlpatterns = [
     path('api/prompts/', include('prompts.urls')),
     path('api/mood/', include('moods.urls')),
     path('api/tags/', include('tags.urls')),
+    path('api/home/', include('home.urls')),
 ]
 
 """

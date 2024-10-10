@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'appconfig',
     'moods',
     'corsheaders',
+    'home',
 ]
 
 MIDDLEWARE = [

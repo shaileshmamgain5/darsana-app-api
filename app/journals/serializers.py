@@ -126,13 +126,5 @@ class JournalEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = JournalEntry
-        fields = [
-            'id',
-            'user',
-            'journal_template',
-            'standalone_prompt',
-            'is_completed',
-            'created_at',
-            'updated_at',
-            'prompt_entries'
-        ]
+        fields = ['id', 'user', 'journal_template', 'standalone_prompt', 'is_completed', 'is_started', 'for_date', 'created_at', 'updated_at', 'prompt_entries']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']

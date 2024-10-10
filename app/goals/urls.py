@@ -7,4 +7,5 @@ router.register(r'goals', GoalViewSet, basename='goal')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('goals/<int:pk>/', GoalViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='goal-detail'),
 ]

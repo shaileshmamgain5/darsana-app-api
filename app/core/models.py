@@ -242,7 +242,7 @@ class JournalTopic(models.Model):
 
 
 class BasePrompt(models.Model):
-    prompt_text = models.TextField(default=list)
+    prompt_text = models.TextField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     is_answer_required = models.BooleanField(default=True)
     tags = models.ManyToManyField(Tag, blank=True)
@@ -301,11 +301,13 @@ class JournalEntry(models.Model):
         blank=True
     )
     is_completed = models.BooleanField(default=False)
+    is_started = models.BooleanField(default=False)
+    for_date = models.DateField(null=True, blank=True) # The date for which the journal entry is intended
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Journal Entry by {self.user.username}"
+        return f"Journal Entry by {self.user.email}"
 
 
 class PromptEntry(models.Model):
@@ -321,7 +323,7 @@ class PromptEntry(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Prompt Entry by {self.journal_entry.user.username}"
+        return f"Prompt Entry by {self.journal_entry.user.email}"
 
 
 class Quote(models.Model):
@@ -384,68 +386,61 @@ class JournalSummary(models.Model):
 # Goals
 
 class Goal(models.Model):
+    REPEAT_CHOICES = [
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+        ('custom', 'Custom'),
+    ]
+
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='goals')
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    repeats = models.CharField(
-        max_length=10,
-        choices=RepeatType.choices,
-        default=RepeatType.DAILY
-    )
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    repeat_type = models.CharField(max_length=10, choices=REPEAT_CHOICES, default='daily')
     is_active = models.BooleanField(default=True)
-
-    class Meta:
-        verbose_name = 'Goal'
-        verbose_name_plural = 'Goals'
+    progress = models.FloatField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
 
     def __str__(self):
         return f"{self.title} - {self.user.email}"
 
+    def is_due_today(self):
+        today = timezone.now().date()
+        if not self.is_active or (self.end_date and self.end_date < today):
+            return False
+
+        if self.repeat_type == 'daily':
+            return True
+        elif self.repeat_type == 'weekly':
+            return today.weekday() in self.repetition.repeat_on.get('days_of_week', [])
+        elif self.repeat_type == 'monthly':
+            return today.day in self.repetition.repeat_on.get('days_of_month', [])
+        elif self.repeat_type == 'custom':
+            # Implement custom logic based on frequency and repeat_on data
+            pass
+
+        return False
 
 class GoalRepetition(models.Model):
-    goal = models.ForeignKey(
-        Goal,
-        on_delete=models.CASCADE,
-        related_name='repetitions'
-    )  # The goal this repetition belongs to
-    repeat_type = models.CharField(
-        max_length=10,
-        choices=RepeatType.choices,
-        default=RepeatType.DAILY
-    )  # Specifies if the repetition is weekly or monthly
-    days_of_week = models.ManyToManyField(
-        DayOfWeek,
-        blank=True
-    )  # Allows selecting multiple days of the week for weekly goals
-    days_of_month = models.ManyToManyField(
-        DayOfMonth,
-        blank=True
-    )  # Allows selecting multiple days of the month for monthly goals
-    last_day_of_month = models.BooleanField(default=False)  # If the goal repeats on the last day of the month
+    goal = models.OneToOneField(Goal, on_delete=models.CASCADE, related_name='repetition')
+    repeat_on = models.JSONField(default=dict)  # Store repetition data for all types
+    frequency = models.PositiveIntegerField(default=1)  # e.g., every 1 week, every 2 months
 
     def __str__(self):
-        if self.repeat_type == RepeatType.WEEKLY:
-            days = ', '.join([day.__str__() for day in self.days_of_week.all()])
-            return f"{self.goal.title} repeats weekly on {days}"
-        elif self.repeat_type == RepeatType.MONTHLY:
-            if self.last_day_of_month:
-                return f"{self.goal.title} repeats on the last day of the month"
-            else:
-                days = ', '.join([str(day) for day in self.days_of_month.all()])
-                return f"{self.goal.title} repeats monthly on days {days}"
-        return f"{self.goal.title} repeats {self.get_repeat_type_display()}"
-
+        return f"Repetition for {self.goal.title}"
 
 class GoalCompletion(models.Model):
-    goal = models.ForeignKey(
-        Goal,
-        on_delete=models.CASCADE,
-        related_name='completions'
-    )  # The goal being tracked
-    date = models.DateField()  # Date the goal was completed
-    is_completed = models.BooleanField(default=False)  # Whether the goal was completed on this date
+    goal = models.ForeignKey(Goal, on_delete=models.CASCADE, related_name='completions')
+    date = models.DateField()
+    is_completed = models.BooleanField(default=False)
+    completion_value = models.FloatField(null=True, blank=True)  # For quantitative tracking
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ['goal', 'date']
 
     def __str__(self):
         return f"{self.goal.title} - {self.date} - {'Completed' if self.is_completed else 'Not Completed'}"
@@ -535,7 +530,7 @@ class MoodEntry(models.Model):
     mood_description = models.TextField(blank=True, null=True)  # Optional description or note about the mood
 
     def __str__(self):
-        return f"Mood Entry for {self.user.username} at {self.created_at}"
+        return f"Mood Entry for {self.user.email} at {self.created_at}"
 
 
 class MoodTag(models.Model):
@@ -555,7 +550,7 @@ class MoodResponse(models.Model):
 
     def __str__(self):
         tags = ', '.join([tag.name for tag in self.mood_tags.all()])
-        return f"Mood Response: {self.mood_entry.user.username} | Tags: {tags}"
+        return f"Mood Response: {self.mood_entry.user.email} | Tags: {tags}"
 
 
 # Profile
@@ -679,7 +674,7 @@ class UserSubscription(models.Model):
     )  # Google/Apple transaction ID
 
     def __str__(self):
-        return f"Subscription for {self.user_profile.user.username} - {self.subscription_plan.name}"
+        return f"Subscription for {self.user_profile.user.email} - {self.subscription_plan.name}"
 
     def is_active(self):
         return self.status == 'active' and (self.end_date is None or self.end_date > timezone.now().date())
