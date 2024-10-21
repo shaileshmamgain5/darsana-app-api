@@ -159,3 +159,18 @@ class PromptEntryAdmin(admin.ModelAdmin):
     get_response_preview.short_description = 'Response Preview'
 
 admin.site.register(models.PromptEntry, PromptEntryAdmin)
+
+class QuoteAdmin(admin.ModelAdmin):
+    list_display = ['text', 'author', 'get_tags', 'get_favorited_by_count']
+    search_fields = ['text', 'author']
+    filter_horizontal = ['tags', 'favorited_by']
+
+    def get_tags(self, obj):
+        return ", ".join([tag.name for tag in obj.tags.all()])
+    get_tags.short_description = 'Tags'
+
+    def get_favorited_by_count(self, obj):
+        return obj.favorited_by.count()
+    get_favorited_by_count.short_description = 'Favorited By'
+
+admin.site.register(models.Quote, QuoteAdmin)
